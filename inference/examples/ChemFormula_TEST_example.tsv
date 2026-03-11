@@ -1,0 +1,12 @@
+index	question	answer	category	difficulty	image_path
+0	请识别图片中的化学分子式。请直接给出分子式，不要包含其他解释。	H2O	inorganic	easy	water.png
+1	请识别图片中的化学分子式。请直接给出分子式，不要包含其他解释。	C6H12O6	organic	medium	glucose.png
+2	请识别图片中的化学分子式。请直接给出分子式，不要包含其他解释。	CH3COOH	organic	medium	acetic_acid.png
+3	请识别图片中的化学分子式。请直接给出分子式，不要包含其他解释。	NaCl	inorganic	easy	sodium_chloride.png
+4	请识别图片中的化学分子式。请直接给出分子式，不要包含其他解释。	C8H10N4O2	organic	hard	caffeine.png
+5	请识别图片中的化学分子式。请直接给出分子式，不要包含其他解释。	H2SO4	inorganic	medium	sulfuric_acid.png
+6	请识别图片中的化学分子式。请直接给出分子式，不要包含其他解释。	C2H5OH	organic	easy	ethanol.png
+7	请识别图片中的化学分子式。请直接给出分子式，不要包含其他解释。	Ca(OH)2	inorganic	medium	calcium_hydroxide.png
+8	请识别图片中的化学分子式。请直接给出分子式，不要包含其他解释。	C6H6	organic	medium	benzene.png
+9	请识别图片中的化学分子式。请直接给出分子式，不要包含其他解释。	NH3	inorganic	easy	ammonia.png
+
