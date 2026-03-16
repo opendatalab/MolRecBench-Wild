@@ -1,0 +1,11 @@
+Pygments==2.19.2
+brainpp==2.7.12.12
+charset-normalizer==3.4.5
+datasets==4.7.0
+epam-indigo==1.36.1
+huggingface_hub==1.6.0
+jsonlines==4.0.0
+mdurl==0.1.2
+networkx==3.4.2
+pip-chill==1.0.5
+rdkit==2025.9.6
