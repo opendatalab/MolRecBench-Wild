@@ -1,0 +1,1 @@
+python evaluate/Evaluator.py --gt_path datasets/cc40/annotations.jsonl --pred_path datasets/cc40/pred.jsonl --save_path tmp/eval_info.json
