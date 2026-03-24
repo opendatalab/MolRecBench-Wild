@@ -1,3 +1,19 @@
+<p align="center">
+  <img src="assets/banner.png" width="45%" alt="RxnCaption Banner" />
+</p>
+
+<h1 align="center"><img src="assets/logo.png" width="36" style="vertical-align: middle;" /> U-MolRecBench-Wild</h1>
+
+<p align="center">
+  <b>A Real-World Benchmark for Optical Chemical Structure Recognition</b>
+</p>
+
+<p align="center">
+  <a href="https://chuangwang123.github.io/RxnCaption/"><img src="https://img.shields.io/badge/🌐%20Project-Page-8A2BE2" alt="Project Page"></a>
+  <a href="https://arxiv.org/abs/2511.02384"><img src="https://img.shields.io/badge/arXiv-2511.02384-b31b1b.svg" alt="arXiv"></a>
+  <a href="https://huggingface.co/datasets/songjhPKU/U-RxnDiagram-15k"><img src="https://img.shields.io/badge/🤗%20Dataset-U--RxnDiagram--15k-blue" alt="Dataset"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/License-CC%20BY--NC%204.0-green.svg" alt="License"></a>
+</p>
 # U-MolRecBench-Wild: A Real-World Benchmark for Optical Chemical Structure Recognition
 
 [![Dataset](https://img.shields.io/badge/Dataset-HuggingFace-orange?logo=huggingface)](https://huggingface.co/datasets/opendatalab/U-MolRecBench-Wild)
@@ -27,13 +43,6 @@ This repository includes:
 - [Citation](#citation)
 - [License](#license)
 
-## Introduction
-
-Optical Chemical Structure Recognition (OCSR) aims to convert molecular diagrams in scientific literature into machine-readable formats. However, due to significant visual complexity and chemical diversity in real images, existing systems perform poorly in authentic scenarios.
-
-We introduce **MOSAIC** (Molecular Optical-Semantic Assessment of Image Complexity), a dual-dimension difficulty framework to quantify visual noise and chemical semantic challenges. Based on this, we constructed **MolRecBench-Wild**, a benchmark set of 5029 structures covering the full spectrum of difficulties observed in real publications.
-
-To address the limitations of SMILES and MolFile in expressing complex chemical information, we propose **CARBON** (Complex Atomic Representation and Bonding Object Notation), a representation language capable of precisely expressing non-standard bonds, mixed valences, and icon-based groups.
 
 ## Key Features
 
@@ -77,7 +86,7 @@ Run the one-click setup script:
 bash setup_vlmevalkit.sh
 ```
 
-After setup, configure your API keys:
+After setup, create a file named ".env" in the VLMEvalKit directory and configure your API keys:
 
 ```bash
 # VLMEvalKit/.env
