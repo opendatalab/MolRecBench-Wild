@@ -60,6 +60,7 @@ echo "  Patch applied successfully."
 # Step 4: Copy inference scripts and prompts
 echo "[4/5] Copying inference scripts and prompt templates..."
 cp -r "${SCRIPT_DIR}/inference/scripts/chem" "${VLMEVALKIT_DIR}/scripts/chem"
+mkdir -p "${VLMEVALKIT_DIR}/examples"
 cp -r "${SCRIPT_DIR}/inference/examples/"* "${VLMEVALKIT_DIR}/examples/"
 echo "  Scripts and prompts copied."
 
