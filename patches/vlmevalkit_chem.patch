@@ -1,0 +1,2323 @@
+diff --git a/.gitignore b/.gitignore
+index acefdb8..861140a 100644
+--- a/.gitignore
++++ b/.gitignore
+@@ -4,9 +4,24 @@
+ __pycache__/
+ *.py[cod]
+ *$py.class
+-
++*.csv
+ # C extensions
+ *.so
++*.xlsx
++*.tsv
++test_chemdfm_x_integration.py
++test_chemvlm.py
++test_intern.py
++test_interns1.py
++test_mathpix.py
++check_reuse_files.py
++convert_for_chemvlm.py
++convert_mathpix.py
++docs/ChemFormulaRecognition_README.md
++docs/ChemFormulaRecognition_README_CN.md
++examples/
++scripts/chem/
++check_reuse_files.py
+ 
+ # Distribution / packaging
+ .Python
+diff --git a/run.py b/run.py
+index a422652..9303ea0 100644
+--- a/run.py
++++ b/run.py
+@@ -195,6 +195,7 @@ You can launch the evaluation by setting either --data and --model or --config.
+     parser.add_argument(
+         '--use-vllm', action='store_true', help='use vllm to generate, the flag is only supported in Llama4 for now')
+     parser.add_argument('--use-verifier', action='store_true', help='use verifier to evaluate')
++    parser.add_argument('--use-image-url', action='store_true', help='use image_url field in TSV instead of base64 encoded image')
+ 
+     args = parser.parse_args()
+     return args
+@@ -287,6 +288,10 @@ def main():
+                     dataset_kwargs = {}
+                     if dataset_name in ['MMLongBench_DOC', 'DUDE', 'DUDE_MINI', 'SLIDEVQA', 'SLIDEVQA_MINI']:
+                         dataset_kwargs['model'] = model_name
++                    
++                    # Add use_image_url parameter
++                    if args.use_image_url:
++                        dataset_kwargs['use_image_url'] = True
+ 
+                     # If distributed, first build the dataset on the main process for doing preparation works
+                     if WORLD_SIZE > 1:
+@@ -302,7 +307,7 @@ def main():
+                 # Handling Multi-Turn Dataset
+                 result_file = osp.join(pred_root, result_file_base)
+                 # Reuse the previous prediction file if exists
+-                if RANK == 0 and len(prev_pred_roots):
++                if RANK == 0:
+                     prepare_reuse_files(
+                         pred_root_meta=pred_root_meta, eval_id=eval_id, model_name=model_name,
+                         dataset_name=dataset_name, reuse=args.reuse, reuse_aux=args.reuse_aux
+diff --git a/vlmeval/api/__init__.py b/vlmeval/api/__init__.py
+index 10f27b1..23dbe80 100644
+--- a/vlmeval/api/__init__.py
++++ b/vlmeval/api/__init__.py
+@@ -20,6 +20,7 @@ from .taichu import TaichuVLAPI, TaichuVLRAPI
+ from .doubao_vl_api import DoubaoVL
+ from .mug_u import MUGUAPI
+ from .kimivl_api import KimiVLAPIWrapper, KimiVLAPI
++from .mathpix import Mathpix
+ 
+ __all__ = [
+     'OpenAIWrapper', 'HFChatModel', 'GeminiWrapper', 'GPT4V', 'Gemini',
+@@ -27,5 +28,6 @@ __all__ = [
+     'Reka', 'GLMVisionAPI', 'CWWrapper', 'SenseChatVisionAPI', 'HunyuanVision',
+     'Qwen2VLAPI', 'BlueLMWrapper', 'BlueLM_API', 'JTVLChatAPI', 'JTVLChatAPI_Mini',
+     'bailingMMAPI', 'TaiyiAPI', 'TeleMMAPI', 'SiliconFlowAPI', 'LMDeployAPI',
+-    'TaichuVLAPI', 'TaichuVLRAPI', 'DoubaoVL', "MUGUAPI", 'KimiVLAPIWrapper', 'KimiVLAPI'
++    'TaichuVLAPI', 'TaichuVLRAPI', 'DoubaoVL', "MUGUAPI", 'KimiVLAPIWrapper', 'KimiVLAPI',
++    'Mathpix'
+ ]
+diff --git a/vlmeval/api/base.py b/vlmeval/api/base.py
+index d5b6c09..0c76d30 100644
+--- a/vlmeval/api/base.py
++++ b/vlmeval/api/base.py
+@@ -130,6 +130,10 @@ class BaseAPI:
+                 mime, s = parse_file(item['value'])
+                 if mime is None:
+                     assert item['type'] == 'text', item['value']
++                elif mime == 'url':
++                    # Handle URL case: keep the URL as-is and trust the type from the message
++                    # Don't change item['value'] as it's already the URL
++                    pass
+                 else:
+                     assert mime.split('/')[0] == item['type']
+                     item['value'] = s
+@@ -164,6 +168,8 @@ class BaseAPI:
+         kwargs.update(kwargs1)
+ 
+         answer = None
++        last_error = None
++        last_log = None
+         # a very small random delay [0s - 0.5s]
+         T = rd.random() * 0.5
+         time.sleep(T)
+@@ -184,7 +190,10 @@ class BaseAPI:
+                         except Exception as e:
+                             self.logger.warning(f'Failed to parse {log} as an http response: {str(e)}. ')
+                     self.logger.info(f'RetCode: {ret_code}\nAnswer: {answer}\nLog: {log}')
++                # Store the last error information
++                last_log = log
+             except Exception as err:
++                last_error = err
+                 if self.verbose:
+                     self.logger.error(f'An error occured during try {i}: ')
+                     self.logger.error(f'{type(err)}: {err}')
+@@ -192,7 +201,17 @@ class BaseAPI:
+             T = rd.random() * self.wait * 2
+             time.sleep(T)
+ 
+-        return self.fail_msg if answer in ['', None] else answer
++        # Construct detailed failure message with error information
++        if answer in ['', None]:
++            fail_msg_detailed = self.fail_msg
++            if last_error is not None:
++                fail_msg_detailed += f' Error: {type(last_error).__name__}: {str(last_error)}'
++            elif last_log is not None:
++                log_str = last_log if isinstance(last_log, str) else (last_log.text if hasattr(last_log, 'text') else str(last_log))
++                fail_msg_detailed += f' Log: {log_str[:500]}'  # Limit log length
++            return fail_msg_detailed
++        else:
++            return answer
+ 
+     def preprocess_message_with_role(self, message):
+         system_prompt = ''
+@@ -237,6 +256,8 @@ class BaseAPI:
+         kwargs.update(kwargs1)
+ 
+         answer = None
++        last_error = None
++        last_log = None
+         # a very small random delay [0s - 0.5s]
+         T = rd.random() * 0.5
+         time.sleep(T)
+@@ -255,7 +276,10 @@ class BaseAPI:
+                         except Exception as e:
+                             self.logger.warning(f'Failed to parse {log} as an http response: {str(e)}. ')
+                     self.logger.info(f'RetCode: {ret_code}\nAnswer: {answer}\nLog: {log}')
++                # Store the last error information
++                last_log = log
+             except Exception as err:
++                last_error = err
+                 if self.verbose:
+                     self.logger.error(f'An error occured during try {i}: ')
+                     self.logger.error(f'{type(err)}: {err}')
+@@ -263,7 +287,17 @@ class BaseAPI:
+             T = rd.random() * self.wait * 2
+             time.sleep(T)
+ 
+-        return self.fail_msg if answer in ['', None] else answer
++        # Construct detailed failure message with error information
++        if answer in ['', None]:
++            fail_msg_detailed = self.fail_msg
++            if last_error is not None:
++                fail_msg_detailed += f' Error: {type(last_error).__name__}: {str(last_error)}'
++            elif last_log is not None:
++                log_str = last_log if isinstance(last_log, str) else (last_log.text if hasattr(last_log, 'text') else str(last_log))
++                fail_msg_detailed += f' Log: {log_str[:500]}'  # Limit log length
++            return fail_msg_detailed
++        else:
++            return answer
+ 
+     def message_to_promptimg(self, message, dataset=None):
+         assert not self.INTERLEAVE
+diff --git a/vlmeval/api/gpt.py b/vlmeval/api/gpt.py
+index 6f929df..c93d4d8 100644
+--- a/vlmeval/api/gpt.py
++++ b/vlmeval/api/gpt.py
+@@ -1,6 +1,7 @@
+ from ..smp import *
+ import os
+ import sys
++import random
+ from .base import BaseAPI
+ 
+ APIBASES = {
+@@ -42,10 +43,11 @@ class OpenAIWrapper(BaseAPI):
+                  temperature: float = 0,
+                  timeout: int = 300,
+                  api_base: str = None,
+-                 max_tokens: int = 2048,
++                 max_tokens: int = 16384,
+                  img_size: int = -1,
+                  img_detail: str = 'low',
+                  use_azure: bool = False,
++                 group: str = None,
+                  **kwargs):
+ 
+         self.model = model
+@@ -54,6 +56,10 @@ class OpenAIWrapper(BaseAPI):
+         self.max_tokens = max_tokens
+         self.temperature = temperature
+         self.use_azure = use_azure
++        # 支持从环境变量读取 group 参数（用于 API 网关分组）
++        if group is None:
++            group = os.environ.get('OPENAI_API_GROUP', None)
++        self.group = group
+ 
+         if 'step' in model:
+             env_key = os.environ.get('STEPAI_API_KEY', '')
+@@ -91,6 +97,14 @@ class OpenAIWrapper(BaseAPI):
+                 key = env_key
+             api_base = 'https://qianfan.baidubce.com/v2/chat/completions'
+             self.baidu_appid = os.environ.get('BAIDU_APP_ID', None)
++        elif 'intern-s1' in model:
++            # Intern-S1 has special key format (JWT token)
++            env_key = os.environ.get('INTERN_S1_API_KEY', '')
++            if key is None:
++                key = env_key
++            assert isinstance(key, str) and len(key) > 0, (
++                'Please set the environment variable INTERN_S1_API_KEY to your intern-s1 key. '
++            )
+         else:
+             if use_azure:
+                 env_key = os.environ.get('AZURE_OPENAI_API_KEY', None)
+@@ -131,11 +145,23 @@ class OpenAIWrapper(BaseAPI):
+             api_version = os.getenv('OPENAI_API_VERSION', None)
+             assert api_version is not None, 'Please set the environment variable OPENAI_API_VERSION. '
+ 
+-            self.api_base = api_base_template.format(
+-                endpoint=os.getenv('AZURE_OPENAI_ENDPOINT'),
+-                deployment_name=os.getenv('AZURE_OPENAI_DEPLOYMENT_NAME'),
+-                api_version=os.getenv('OPENAI_API_VERSION')
+-            )
++            # Support multiple endpoints for Azure load balancing
++            if isinstance(endpoint, (list, tuple)):
++                self.api_base_list = [
++                    api_base_template.format(
++                        endpoint=ep,
++                        deployment_name=deployment_name,
++                        api_version=api_version
++                    ) for ep in endpoint
++                ]
++            else:
++                self.api_base_list = [api_base_template.format(
++                    endpoint=endpoint,
++                    deployment_name=deployment_name,
++                    api_version=api_version
++                )]
++            self.api_base = self.api_base_list[0]  # Default to first one for logging
++            self.logger.info(f'Using Azure API Base(s) ({len(self.api_base_list)}): {self.api_base_list}; API Key: {self.key}')
+         else:
+             if api_base is None:
+                 if 'OPENAI_API_BASE' in os.environ and os.environ['OPENAI_API_BASE'] != '':
+@@ -146,19 +172,39 @@ class OpenAIWrapper(BaseAPI):
+ 
+             assert api_base is not None
+ 
+-            if api_base in APIBASES:
+-                self.api_base = APIBASES[api_base]
+-            elif api_base.startswith('http'):
+-                self.api_base = api_base
++            # Support multiple api_base for load balancing
++            if isinstance(api_base, (list, tuple)):
++                # Multiple api_base provided, store as list
++                self.api_base_list = []
++                for base in api_base:
++                    if base in APIBASES:
++                        self.api_base_list.append(APIBASES[base])
++                    elif base.startswith('http'):
++                        self.api_base_list.append(base)
++                    else:
++                        self.logger.error(f'Unknown API Base: {base}. ')
++                        raise NotImplementedError
++                self.api_base = self.api_base_list[0]  # Default to first one for logging
++                self.logger.info(f'Using multiple API Bases ({len(self.api_base_list)}): {self.api_base_list}; API Key: {self.key}')
+             else:
+-                self.logger.error('Unknown API Base. ')
+-                raise NotImplementedError
++                # Single api_base, convert to list for consistency
++                if api_base in APIBASES:
++                    self.api_base = APIBASES[api_base]
++                elif api_base.startswith('http'):
++                    self.api_base = api_base
++                else:
++                    self.logger.error('Unknown API Base. ')
++                    raise NotImplementedError
++                self.api_base_list = [self.api_base]
++                self.logger.info(f'Using API Base: {self.api_base}; API Key: {self.key}')
++            
+             if os.environ.get('BOYUE', None):
+-                self.api_base = os.environ.get('BOYUE_API_BASE')
++                boyue_base = os.environ.get('BOYUE_API_BASE')
++                if boyue_base:
++                    self.api_base_list = [boyue_base]
++                    self.api_base = boyue_base
+                 self.key = os.environ.get('BOYUE_API_KEY')
+ 
+-        self.logger.info(f'Using API Base: {self.api_base}; API Key: {self.key}')
+-
+     # inputs can be a lvl-2 nested list: [content1, content2, content3, ...]
+     # content can be a string or a list of image & text
+     def prepare_itlist(self, inputs):
+@@ -199,12 +245,18 @@ class OpenAIWrapper(BaseAPI):
+         input_msgs = self.prepare_inputs(inputs)
+         temperature = kwargs.pop('temperature', self.temperature)
+         max_tokens = kwargs.pop('max_tokens', self.max_tokens)
++        
++        # Handle extra_body parameter (for models like intern-s1)
++        extra_body = kwargs.pop('extra_body', None)
+ 
+         # Will send request if use Azure, dk how to use openai client for it
+         if self.use_azure:
+             headers = {'Content-Type': 'application/json', 'api-key': self.key}
+         elif 'internvl2-pro' in self.model:
+             headers = {'Content-Type': 'application/json', 'Authorization': self.key}
++        elif 'intern-s1' in self.model:
++            # Intern-S1 uses token without "Bearer" prefix
++            headers = {'Content-Type': 'application/json', 'Authorization': self.key}
+         else:
+             headers = {'Content-Type': 'application/json', 'Authorization': f'Bearer {self.key}'}
+         if hasattr(self, 'baidu_appid'):
+@@ -222,14 +274,25 @@ class OpenAIWrapper(BaseAPI):
+             payload.pop('temperature')
+         else:
+             payload['max_tokens'] = max_tokens
++        
++        # Merge extra_body into payload (for models like intern-s1 that need special parameters)
++        if extra_body is not None:
++            payload.update(extra_body)
+ 
+         if 'gemini' in self.model:
+             payload.pop('max_tokens')
+             payload.pop('n')
+             payload['reasoning_effort'] = 'high'
+-
++        
++        # # 添加 API 网关的 group 参数（如果设置）
++        # if self.group is not None:
++        #     payload['group'] = self.group
++
++        # Randomly select an api_base for load balancing if multiple are available
++        selected_api_base = random.choice(self.api_base_list)
++        
+         response = requests.post(
+-            self.api_base,
++            selected_api_base,
+             headers=headers, data=json.dumps(payload), timeout=self.timeout * 1.1)
+         ret_code = response.status_code
+         ret_code = 0 if (200 <= int(ret_code) < 300) else ret_code
+diff --git a/vlmeval/api/mathpix.py b/vlmeval/api/mathpix.py
+new file mode 100644
+index 0000000..28fb3ac
+--- /dev/null
++++ b/vlmeval/api/mathpix.py
+@@ -0,0 +1,233 @@
++import json
++import os
++import re
++
++import requests
++
++from .base import BaseAPI
++from ..smp import *
++
++
++# HTTP status code constants
++HTTP_OK_MIN = 200
++HTTP_OK_MAX = 299
++
++
++class Mathpix(BaseAPI):
++    """
++    Mathpix OCR model wrapper for VLMEvalKit.
++    
++    This model uses Mathpix OCR API to recognize STEM document content, including
++    math, text, tables, and chemistry diagrams. Can extract SMILES notation for
++    chemical structures.
++    
++    Requires environment variables:
++        MATHPIX_APP_ID: Your Mathpix app ID
++        MATHPIX_APP_KEY: Your Mathpix app key
++    """
++    
++    is_api: bool = True
++    INSTALL_REQ = False
++    
++    def __init__(
++        self,
++        app_id: str = None,
++        app_key: str = None,
++        retry: int = 5,
++        verbose: bool = False,
++        timeout: int = 60,
++        include_smiles: bool = True,
++        include_latex: bool = True,
++        include_text: bool = True,
++        **kwargs
++    ):
++        """
++        Initialize Mathpix model.
++        
++        Args:
++            app_id: Mathpix app ID (defaults to MATHPIX_APP_ID env var)
++            app_key: Mathpix app key (defaults to MATHPIX_APP_KEY env var)
++            retry: Number of retries on failure
++            verbose: Whether to print verbose logs
++            timeout: Request timeout in seconds
++            include_smiles: Whether to request SMILES format
++            include_latex: Whether to request LaTeX format
++            include_text: Whether to request text format
++            **kwargs: Additional arguments for BaseAPI
++        """
++        # Get credentials from environment or arguments
++        self.app_id = app_id or os.environ.get('MATHPIX_APP_ID')
++        self.app_key = app_key or os.environ.get('MATHPIX_APP_KEY')
++        
++        assert self.app_id is not None, (
++            'Please set MATHPIX_APP_ID environment variable or pass app_id argument'
++        )
++        assert self.app_key is not None, (
++            'Please set MATHPIX_APP_KEY environment variable or pass app_key argument'
++        )
++        
++        self.timeout = timeout
++        self.include_smiles = include_smiles
++        self.include_latex = include_latex
++        self.include_text = include_text
++        
++        # Build formats list
++        formats = []
++        if self.include_text:
++            formats.append('text')
++        if self.include_latex:
++            formats.append('latex_styled')
++        if self.include_smiles:
++            formats.append('smiles')
++        
++        self.formats = formats
++        
++        super().__init__(
++            retry=retry,
++            verbose=verbose,
++            fail_msg='Failed to obtain answer via Mathpix API.',
++            **kwargs
++        )
++        
++        self.logger.info(f'Using Mathpix API with app_id: {self.app_id[:10]}...')
++    
++    def extract_text_from_message(self, message):
++        """
++        Extract text prompt from message.
++        
++        Args:
++            message: Input message (list of dicts)
++            
++        Returns:
++            str: Extracted text content
++        """
++        text_parts = []
++        for item in message:
++            if item.get('type') == 'text':
++                text_parts.append(item.get('value', ''))
++        return ' '.join(text_parts) if text_parts else None
++    
++    def extract_smiles_from_text(self, text):
++        """
++        Extract SMILES notation from text.
++        
++        Args:
++            text: Text that may contain SMILES in format <smiles>...</smiles>
++            
++        Returns:
++            str: Extracted SMILES string, or None if not found
++        """
++        if text is None or not isinstance(text, str):
++            return ''
++        
++        # Match <smiles>...</smiles> format
++        match = re.search(r'<smiles>(.*?)</smiles>', text, re.IGNORECASE)
++        if match:
++            return match.group(1).strip()
++        
++        # If text doesn't contain tags, assume it's already SMILES
++        # (for backward compatibility with direct SMILES response)
++        # Return the string itself (even if empty)
++        return text.strip()
++    
++    def is_url(self, path_or_url):
++        """
++        Check if the input is a URL.
++        
++        Args:
++            path_or_url: String that might be a URL or file path
++            
++        Returns:
++            bool: True if it's a URL, False otherwise
++        """
++        return isinstance(path_or_url, str) and (
++            path_or_url.startswith('http://') or 
++            path_or_url.startswith('https://')
++        )
++    
++    def generate_inner(self, inputs, **kwargs):
++        """
++        Generate response using Mathpix API.
++        
++        Args:
++            inputs: Preprocessed message (list of dicts)
++            **kwargs: Additional arguments
++            
++        Returns:
++            tuple: (ret_code, answer, response)
++                ret_code: 0 if success, non-zero if failed
++                answer: Extracted answer string
++                response: HTTP response object
++        """
++        # Find the first image in the inputs
++        image_input = None
++        for item in inputs:
++            if item.get('type') == 'image':
++                image_input = item.get('value')
++                break
++        
++        if image_input is None:
++            return -1, 'No image found in input', None
++        
++        # Extract text prompt if any
++        # text_prompt = self.extract_text_from_message(inputs)
++        
++        # Prepare headers
++        headers = {
++            'app_id': self.app_id,
++            'app_key': self.app_key,
++            'Content-type': 'application/json'
++        }
++        
++        # Check if input is URL or file path
++        assert self.is_url(image_input), 'Image input must be a URL'
++            # Use URL-based request
++        data = {
++            'src': image_input,
++            "rm_spaces": True,
++            "include_smiles": True
++        }
++            
++        try:
++            response = requests.post(
++                'https://api.mathpix.com/v3/text',
++                headers=headers,
++                json=data,
++                # timeout=self.timeout
++            )
++        except Exception as err:
++            if self.verbose:
++                self.logger.error(f'Request failed: {err}')
++            return -1, f'Request failed: {str(err)}', None
++        
++        ret_code = response.status_code
++        # Convert HTTP status to ret_code (0 for success)
++        ret_code = 0 if (HTTP_OK_MIN <= ret_code <= HTTP_OK_MAX) else ret_code
++        
++        # Extract answer
++        try:
++            resp_json = response.json()
++            smiles_extracted = self.extract_smiles_from_text(resp_json['text'])
++            answer = smiles_extracted if smiles_extracted else resp_json['text']
++                
++        except Exception as err:
++            if self.verbose:
++                self.logger.error(f'Failed to parse response: {err}')
++                self.logger.error(f'Response: {response.text}')
++        
++        return ret_code, answer, response
++    
++    def generate(self, message, dataset=None):
++        """
++        Generate response for the given message.
++        
++        Args:
++            message: Input message (can be str, dict, or list)
++            dataset: Dataset name (not used in Mathpix)
++            
++        Returns:
++            str: Generated response
++        """
++        return super(Mathpix, self).generate(message)
++
++
+diff --git a/vlmeval/config.py b/vlmeval/config.py
+index 22077b6..959846d 100644
+--- a/vlmeval/config.py
++++ b/vlmeval/config.py
+@@ -81,6 +81,9 @@ ungrouped = {
+     "Falcon2-VLM-11B": partial(Falcon2VLM, model_path="tiiuae/falcon-11B-vlm"),
+ }
+ 
++intern_s1_key = os.environ.get('INTERN_S1_API_KEY', None)
++intern_s1_base = os.environ.get('INTERN_S1_API_BASE', 'https://chat.intern-ai.org.cn/api/v1/')
++
+ o1_key = os.environ.get('O1_API_KEY', None)
+ o1_base = os.environ.get('O1_API_BASE', None)
+ o1_apis = {
+@@ -161,7 +164,7 @@ api_models = {
+         retry=10,
+         verbose=False,
+     ),
+-    "GPT4o": partial(
++    "GPT4o-2024-05-13": partial(
+         GPT4V,
+         model="gpt-4o-2024-05-13",
+         temperature=0,
+@@ -169,25 +172,28 @@ api_models = {
+         img_detail="low",
+         retry=10,
+         verbose=False,
+-    ),
+-    "GPT4o_HIGH": partial(
+-        GPT4V,
+-        model="gpt-4o-2024-05-13",
+-        temperature=0,
+-        img_size=-1,
+-        img_detail="high",
+-        retry=10,
+-        verbose=False,
+-    ),
+-    "GPT4o_20240806": partial(
+-        GPT4V,
+-        model="gpt-4o-2024-08-06",
+-        temperature=0,
+-        img_size=-1,
+-        img_detail="high",
+-        retry=10,
+-        verbose=False,
+-    ),
++        max_tokens=16384,  # Increased for chemical graph parsing tasks
++    ),
++    # "GPT4o_HIGH": partial(
++    #     GPT4V,
++    #     model="gpt-4o-2024-05-13",
++    #     temperature=0,
++    #     img_size=-1,
++    #     img_detail="high",
++    #     retry=10,
++    #     verbose=False,
++    #     max_tokens=16384,  # Increased for chemical graph parsing tasks
++    # ),
++    # "GPT4o_20240806": partial(
++    #     GPT4V,
++    #     model="gpt-4o-2024-08-06",
++    #     temperature=0,
++    #     img_size=-1,
++    #     img_detail="high",
++    #     retry=10,
++    #     verbose=False,
++    #     max_tokens=16384,  # Increased for chemical graph parsing tasks
++    # ),
+     "GPT4o_20241120": partial(
+         GPT4V,
+         model="gpt-4o-2024-11-20",
+@@ -196,6 +202,7 @@ api_models = {
+         img_detail="high",
+         retry=10,
+         verbose=False,
++        max_tokens=16384,  # https://platform.openai.com/docs/models/gpt-4o?snapshot=gpt-4o-2024-11-20
+     ),
+     "ChatGPT4o": partial(
+         GPT4V,
+@@ -205,6 +212,7 @@ api_models = {
+         img_detail="high",
+         retry=10,
+         verbose=False,
++        max_tokens=16384,  # Increased for chemical graph parsing tasks
+     ),
+     "GPT4o_MINI": partial(
+         GPT4V,
+@@ -214,6 +222,7 @@ api_models = {
+         img_detail="high",
+         retry=10,
+         verbose=False,
++        max_tokens=16384,  # Increased for chemical graph parsing tasks
+     ),
+     "GPT4.5": partial(
+         GPT4V, 
+@@ -259,7 +268,25 @@ api_models = {
+         retry=3,
+         verbose=False,
+         max_tokens=2**14,
+-        timeout=300,
++        timeout=1800,
++    ),
++    "gpt-5-high": partial(
++        GPT4V,
++        model="gpt-5-high",
++        img_detail="high",
++        retry=3,
++        verbose=False,
++        max_tokens=2**14,
++        timeout=1800,
++    ),
++    "gpt-5-low": partial(
++        GPT4V,
++        model="gpt-5-low",
++        img_detail="high",
++        retry=3,
++        verbose=False,
++        max_tokens=2**14,
++        timeout=1800,
+     ),
+     "gpt-5-mini-2025-08-07": partial(
+         GPT4V,
+@@ -268,7 +295,7 @@ api_models = {
+         retry=3,
+         verbose=False,
+         max_tokens=2**14,
+-        timeout=300,
++        timeout=1800,
+     ),
+     "gpt-5-nano-2025-08-07": partial(
+         GPT4V,
+@@ -277,7 +304,7 @@ api_models = {
+         retry=3,
+         verbose=False,
+         max_tokens=2**14,
+-        timeout=300,
++        timeout=1800,
+     ),
+     # Gemini
+     "GeminiPro1-0": partial(
+@@ -312,6 +339,110 @@ api_models = {
+     "QwenVLPlus": partial(QwenVLAPI, model="qwen-vl-plus", temperature=0, retry=10),
+     "QwenVLMax": partial(QwenVLAPI, model="qwen-vl-max", temperature=0, retry=10),
+     "QwenVLMax-250408": partial(QwenVLAPI, model="qwen-vl-max-2025-04-08", temperature=0, retry=10),
++    # Qwen-VL via OpenAI-compatible API (requires OPENAI_API_BASE env var)
++    # Note: img_size=-1 means no resizing (recommended for Qwen-VL)
++    "QwenVLMax-OpenAI": partial(
++        GPT4V,
++        model="qwen-vl-max-latest",
++        temperature=0,
++        img_size=-1,          # 不调整图片大小，保持原图
++        img_detail="high",
++        retry=10,
++        max_tokens=8192,    # qwen-vl-max 最大输出就是 8192 的token数 https://help.aliyun.com/zh/model-studio/vision
++        verbose=True,
++    ),
++    "QwenVLMax-250408-OpenAI": partial(
++        GPT4V,
++        model="qwen-vl-max-2025-04-08",
++        temperature=0,
++        img_size=-1,          # 不调整图片大小，保持原图
++        img_detail="high",
++        retry=10,
++        verbose=True,
++    ),
++    "GLM-4.5v": partial(
++        GPT4V,
++        model="glm-4.5v",
++        # api_base="http://35.220.164.252:3888/v1",
++        temperature=0,
++        img_size=-1,          # 不调整图片大小，保持原图
++        # img_detail="high",
++        retry=10,
++        verbose=True,
++    ),
++    # doubao-seed-1-6-vision-250815
++    "Doubao-Seed-1-6-Vision-250815": partial(
++        GPT4V,
++        model="doubao-seed-1-6-vision-250815",
++        temperature=0,
++        img_size=-1,          # 不调整图片大小，保持原图
++        img_detail="high",
++        retry=10,
++        verbose=True,
++    ),
++    "grok-4": partial(
++        GPT4V,
++        model="x-ai/grok-4",
++        temperature=0,
++        img_size=-1,          # 不调整图片大小，保持原图
++        # img_detail="high",
++        retry=10,
++        verbose=True,
++    ),
++    # Gemini via OpenAI-compatible API (requires OPENAI_API_BASE env var)
++    # Note: img_size=-1 means no resizing (recommended for Gemini)
++    "Gemini2.5-Pro-OpenAI": partial(
++        GPT4V,
++        model="gemini-2.5-pro",   # 动态 thinking 长度128到32768
++        # model = "gemini-2.5-pro-nothinking",
++        temperature=0,
++        img_size=-1,          # 不调整图片大小，保持原图
++        img_detail="high",
++        retry=10,
++        verbose=True,
++        max_tokens=65536
++    ),
++    # gemini-2.5-flash
++    "Gemini2.5-Flash-OpenAI": partial(
++        GPT4V,
++        model="gemini-2.5-flash",
++        temperature=0,
++        img_size=-1,          # 不调整图片大小，保持原图
++        img_detail="high",
++        retry=10,
++        verbose=True,
++        max_tokens=65536
++    ),
++    "Gemini2.5-Flash-OpenAI": partial(
++        GPT4V,
++        model="gemini-2.5-flash",
++        temperature=0,
++        img_size=-1,          # 不调整图片大小，保持原图
++        img_detail="high",
++        retry=10,
++        verbose=True,
++    ),
++    # gemini-3
++    "Gemini3-Pro-Preview-OpenAI": partial(
++        GPT4V,
++        model="gemini-3-pro-preview",
++        temperature=0,
++        img_size=-1,          # 不调整图片大小，保持原图
++        img_detail="high",
++        retry=10,
++        verbose=True,
++        max_tokens=65536
++    ),
++    "claude-opus-4-6": partial(
++        GPT4V,
++        model="claude-opus-4-6",
++        temperature=0,
++        img_size=-1,          # 不调整图片大小，保持原图
++        img_detail="high",
++        retry=10,
++        verbose=True,
++        max_tokens=65536
++    ),
+ 
+     # Reka
+     "RekaEdge": partial(Reka, model="reka-edge-20240208"),
+@@ -357,6 +488,9 @@ api_models = {
+     "Claude3V_Opus": partial(
+         Claude3V, model="claude-3-opus-20240229", temperature=0, retry=10, verbose=False
+     ),
++    "Claude_Opus-4-6": partial(
++        Claude3V, model="claude-opus-4-6", temperature=0, retry=10, verbose=False
++    ),
+     "Claude3V_Sonnet": partial(
+         Claude3V,
+         model="claude-3-sonnet-20240229",
+@@ -557,15 +691,15 @@ api_models = {
+         temperature=0,
+         retry=10,
+     ),
+-    "grok-4-0709": partial(
+-        GPT4V,
+-        model="grok-4-0709",
+-        api_base="https://api.x.ai/v1/chat/completions",
+-        temperature=0,
+-        retry=3,
+-        timeout=1200, 
+-        max_tokens=16384
+-    ),
++    # "grok-4-0709": partial(
++    #     GPT4V,
++    #     model="grok-4-0709",
++    #     api_base="https://api.x.ai/v1/chat/completions",
++    #     temperature=0,
++    #     retry=3,
++    #     timeout=1200, 
++    #     max_tokens=16384
++    # ),
+     # kimi
+     "moonshot-v1-8k": partial(
+         GPT4V,
+@@ -1733,6 +1867,72 @@ cosmos_series = {
+     'Cosmos-Reason1-7B': partial(Cosmos, model_path='nvidia/Cosmos-Reason1-7B', use_vllm=True),
+ }
+ 
++intern_s1 = {
++    "Intern-S1": partial(
++        GPT4V,
++        model="intern_s1",
++        key=intern_s1_key,
++        api_base=intern_s1_base,
++        temperature=0,
++        img_size=-1,
++        img_detail="high",
++        retry=10,
++        verbose=False,
++        extra_body={"thinking_mode": True},
++    ),
++    "Intern-S1-API": partial(
++        GPT4V,
++        model="intern-s1",
++        key=intern_s1_key,
++        api_base=intern_s1_base,
++        temperature=0,
++        img_size=-1,
++        img_detail="high",
++        retry=10,
++        verbose=False,
++        timeout=1800,
++    ),
++    "InternVL3.5-241B-A28B-API": partial(
++        GPT4V,
++        model="internvl3.5-241b-a28b",
++        key=intern_s1_key,
++        api_base=intern_s1_base,
++        temperature=0,
++        img_size=-1,
++        img_detail="high",
++        retry=10,
++        verbose=False,
++        timeout=1800,
++    ),
++}
++
++chemvlm_series = {
++    "ChemVLM-26B": partial(
++        ChemVLMChat, 
++        model_path="AI4Chem/ChemVLM-26B",
++        image_size=448,
++        max_num=6,
++        device_map='auto',
++    ),
++}
++
++chemdfm_x_series = {
++    "ChemDFM-X-13B": partial(
++        ChemDFM_X,
++        model_path="OpenDFM/ChemDFM-X-v1.0-13B",
++        max_new_tokens=1024,
++    ),
++}
++
++mathpix_series = {
++    "Mathpix": Mathpix,
++    "Mathpix-SMILES": partial(
++        Mathpix,
++        include_latex=False,
++        include_text=False,
++    ),
++}
++
+ internvl_groups = [
+     internvl, internvl2, internvl2_5, mini_internvl, internvl2_5_mpo, 
+     internvl3, internvl3_5
+@@ -1748,14 +1948,14 @@ model_groups = [
+     internvl_series, yivl_series, xcomposer_series, minigpt4_series, 
+     idefics_series, instructblip_series, deepseekvl_series, deepseekvl2_series, 
+     janus_series, minicpm_series, cogvlm_series, wemm_series, cambrian_series, 
+-    chameleon_series, video_models, ovis_series, vila_series, mantis_series,
++    chameleon_series, video_models, intern_s1, ovis_series, vila_series, mantis_series,
+     mmalaya_series, phi3_series, phi4_series, xgen_mm_series, qwen2vl_series,qwen3vl_series,
+     slime_series, eagle_series, moondream_series, llama_series, molmo_series,
+     kosmos_series, points_series, nvlm_series, vintern_series, h2ovl_series,
+     aria_series, smolvlm_series, sail_series, valley_series, vita_series,
+     ross_series, emu_series, ola_series, ursa_series, gemma_series,
+     long_vita_series, ristretto_series, kimi_series, aguvis_series, hawkvl_series, 
+-    flash_vl, kimi_vllm_series, oryx_series, treevgr_series, varco_vision_series, qtunevl_series, xvl_series, thyme_series,logics_series, cosmos_series
++    flash_vl, kimi_vllm_series, oryx_series, treevgr_series, varco_vision_series, qtunevl_series, xvl_series, thyme_series,logics_series, cosmos_series, intern_s1, chemvlm_series, chemdfm_x_series, mathpix_series
+ ]
+ 
+ for grp in model_groups:
+diff --git a/vlmeval/dataset/__init__.py b/vlmeval/dataset/__init__.py
+index d52fe0d..d1e0c68 100644
+--- a/vlmeval/dataset/__init__.py
++++ b/vlmeval/dataset/__init__.py
+@@ -20,6 +20,10 @@ from .image_vqa import (
+ from .image_ccocr import CCOCRDataset
+ from .image_shortqa import ImageShortQADataset, PathVQA_VAL, PathVQA_TEST
+ from .text_mcq import CustomTextMCQDataset, TextMCQDataset
++from .chem_formula import (
++    ChemFormulaRecognition, ChemFormulaRecognitionOrganic,
++    ChemFormulaRecognitionInorganic, ChemFormulaRecognitionStructural
++)
+ 
+ from .vcr import VCRDataset
+ from .mmlongbench import MMLongBench
+@@ -212,7 +216,8 @@ IMAGE_DATASET = [
+     MMEReasoning, GOBenchDataset, SFE, ChartMimic, MMVMBench, XLRSBench,
+     OmniEarthMCQBench, VisFactor, OSTDataset, OCRBench_v2, TreeBench, CVQA, M4Bench,
+     AyaVisionBench, TopViewRS, VLMBias, MMHELIX, MedqbenchMCQDataset,
+-    MedqbenchPairedDescriptionDataset, MedqbenchCaptionDataset, ChartMuseum, ChartQAPro
++    MedqbenchPairedDescriptionDataset, MedqbenchCaptionDataset, ChartMuseum, ChartQAPro,
++    ChemFormulaRecognition
+ ]
+ 
+ VIDEO_DATASET = [
+diff --git a/vlmeval/dataset/chem_formula.py b/vlmeval/dataset/chem_formula.py
+new file mode 100644
+index 0000000..b9381dd
+--- /dev/null
++++ b/vlmeval/dataset/chem_formula.py
+@@ -0,0 +1,344 @@
++"""
++Chemical Formula Recognition Benchmark
++用于评测视觉语言模型对化学分子式图像的识别能力
++"""
++
++import pandas as pd
++
++from .image_base import ImageBaseDataset
++from ..smp import *
++from ..smp.file import get_intermediate_file_path
++
++
++def normalize_formula(formula):
++    """
++    标准化化学分子式，移除空格和不必要的字符
++    
++    Args:
++        formula: 化学分子式字符串
++        
++    Returns:
++        标准化后的化学分子式
++    """
++    if pd.isna(formula) or formula == '':
++        return ''
++    
++    # 移除空格
++    formula = str(formula).strip()
++    # 移除多余空格
++    formula = ' '.join(formula.split())
++    
++    return formula
++
++
++def exact_match_score(prediction, answer):
++    """
++    精确匹配评分
++    
++    Args:
++        prediction: 模型预测的化学分子式
++        answer: 正确答案
++        
++    Returns:
++        1 表示完全匹配，0 表示不匹配
++    """
++    pred_norm = normalize_formula(prediction)
++    ans_norm = normalize_formula(answer)
++    
++    return 1 if pred_norm == ans_norm else 0
++
++
++def case_insensitive_match_score(prediction, answer):
++    """
++    不区分大小写的匹配评分
++    
++    Args:
++        prediction: 模型预测的化学分子式
++        answer: 正确答案
++        
++    Returns:
++        1 表示匹配（忽略大小写），0 表示不匹配
++    """
++    pred_norm = normalize_formula(prediction).lower()
++    ans_norm = normalize_formula(answer).lower()
++    
++    return 1 if pred_norm == ans_norm else 0
++
++
++def calculate_formula_similarity(prediction, answer):
++    """
++    计算化学分子式的相似度
++    基于字符级别的编辑距离
++    
++    Args:
++        prediction: 模型预测的化学分子式
++        answer: 正确答案
++        
++    Returns:
++        相似度分数 (0-1)
++    """
++    pred_norm = normalize_formula(prediction)
++    ans_norm = normalize_formula(answer)
++    
++    if not ans_norm:
++        return 0.0
++    
++    if pred_norm == ans_norm:
++        return 1.0
++    
++    # 计算编辑距离
++    m, n = len(pred_norm), len(ans_norm)
++    dp = [[0] * (n + 1) for _ in range(m + 1)]
++    
++    for i in range(m + 1):
++        dp[i][0] = i
++    for j in range(n + 1):
++        dp[0][j] = j
++    
++    for i in range(1, m + 1):
++        for j in range(1, n + 1):
++            if pred_norm[i-1] == ans_norm[j-1]:
++                dp[i][j] = dp[i-1][j-1]
++            else:
++                dp[i][j] = min(dp[i-1][j], dp[i][j-1], dp[i-1][j-1]) + 1
++    
++    edit_distance = dp[m][n]
++    max_len = max(m, n)
++    
++    return 1 - (edit_distance / max_len) if max_len > 0 else 0.0
++
++
++class ChemFormulaRecognition(ImageBaseDataset):
++    """
++    化学分子式识别 Benchmark
++    
++    数据集评测化学分子式图像识别能力，包括：
++    - 有机化合物分子式识别
++    - 无机化合物分子式识别  
++    - 复杂结构式识别
++    
++    TSV 文件格式要求：
++    - index: 唯一标识符
++    - image: 图片的 base64 编码（或引用其他 index）
++    - image_path: 图片路径（可选）
++    - question: 提问内容（如："请识别图片中的化学分子式"）
++    - answer: 正确的化学分子式
++    - category: 分子式类型（可选，如：organic, inorganic, structural）
++    - difficulty: 难度等级（可选，如：easy, medium, hard）
++    """
++    
++    TYPE = 'ChemFormula'
++    
++    DATASET_URL = {
++        # 将您的 TSV 数据集文件上传到可访问的 URL，或者放在本地
++        # 示例：'ChemFormula_TEST': 'https://your-server.com/ChemFormula_TEST.tsv'
++        # 本地文件：确保设置环境变量 export LMUData=/mnt/petrelfs/lilinye/LMUData
++        # export LMUData=/mnt/petrelfs/aohuijie/LMUData
++        # 然后文件命名为 chem.tsv，系统会自动在 $LMUData 目录下查找
++        'chem': '',  # 留空表示使用本地文件 chem.tsv
++        'chem_graph_simple': '',  # 留空表示使用本地文件 chem_graph_simple.tsv
++        'chem_smiles': '',  # 留空表示使用本地文件 chem_smiles.tsv
++        'chem_smiles_with_url': '',  # 留空表示使用本地文件 chem_smiles_with_url.tsv
++        'abbr_graph_0107': '',  # USPTO 数据集（Graph 格式）
++        'abbr_smiles_0107': '',  # USPTO 数据集（SMILES 格式）
++        'chem_uspto': '',  # USPTO 数据集
++    }
++    
++    DATASET_MD5 = {
++        'chem': None,  # 可以设置为 MD5 值以验证文件完整性
++        'chem_graph_simple': None,
++        'chem_smiles': None,    
++        'chem_smiles_with_url': None,
++        'abbr_graph': None,
++        'abbr_smiles': None,
++        'abbr_graph_test10': None,
++        'abbr_smiles_test10': None,
++        'chem_uspto': None,
++    }
++    
++    def build_prompt(self, line):
++        """
++        构建化学分子式识别的 prompt
++        
++        Args:
++            line: 数据记录（int 索引或 pd.Series）
++            
++        Returns:
++            多模态消息列表
++        """
++        if isinstance(line, int):
++            line = self.data.iloc[line]
++        
++        # 构建多模态消息
++        msgs = []
++        
++        # 如果存在 visual_example 字段，先添加 visual example 图像
++        # 支持多个 visual_example，如 visual_example_1, visual_example_2 等
++        # 首先检查是否有带数字后缀的 visual_example
++        visual_example_idx = 1
++        has_numbered_examples = False
++        
++        # 按顺序查找 visual_example_1, visual_example_2, ...
++        while True:
++            field_name = f'visual_example_{visual_example_idx}'
++            if field_name in line and pd.notna(line[field_name]) and line[field_name]:
++                visual_example_path = line[field_name]
++                msgs.append(dict(type='image', value=visual_example_path))
++                has_numbered_examples = True
++                visual_example_idx += 1
++            else:
++                break
++        
++        # 如果没有带数字后缀的，检查是否有单独的 visual_example 字段
++        if not has_numbered_examples and 'visual_example' in line and pd.notna(line['visual_example']) and line['visual_example']:
++            # visual_example 直接使用图片路径
++            visual_example_path = line['visual_example']
++            msgs.append(dict(type='image', value=visual_example_path))
++        
++        # 获取图片路径或URL
++        # 优先使用 image_url（如果存在且 use_image_url 为 True）
++        if self.use_image_url and 'image_url' in line and pd.notna(line['image_url']) and line['image_url']:
++            # 使用 URL 而不是本地路径
++            tgt_path = toliststr(line['image_url'])
++        elif self.meta_only:
++            tgt_path = toliststr(line['image_path'])
++        else:
++            tgt_path = self.dump_image(line)
++        
++        # 添加主要图像
++        if isinstance(tgt_path, list):
++            msgs.extend([dict(type='image', value=p) for p in tgt_path])
++        else:
++            msgs.append(dict(type='image', value=tgt_path))
++        
++        # 获取问题文本
++        if 'question' in line and not pd.isna(line['question']) and line['question'] != '':
++            question = line['question']
++        else:
++            # 默认问题
++            raise ValueError("question is required")
++        
++        # 添加问题文本
++        msgs.append(dict(type='text', value=question))
++        
++        return msgs
++    
++    def evaluate(self, eval_file, **judge_kwargs):
++        """
++        评估化学分子式识别结果
++        
++        Args:
++            eval_file: 包含预测结果的 .xlsx 文件路径
++            **judge_kwargs: 评测相关参数
++            
++        Returns:
++            1 (简化版本)
++        """
++        # 简化版本：直接返回 1
++        # TODO: 完整的评估逻辑已注释，需要时可以取消注释启用
++        
++        # # 加载预测结果
++        # data = load(eval_file)
++        # 
++        # assert 'answer' in data and 'prediction' in data, \
++        #     "评测文件必须包含 'answer' 和 'prediction' 字段"
++        # 
++        # # 确保数据类型为字符串
++        # data['prediction'] = [str(x) if not pd.isna(x) else '' for x in data['prediction']]
++        # data['answer'] = [str(x) if not pd.isna(x) else '' for x in data['answer']]
++        # 
++        # # 计算各项指标
++        # data['exact_match'] = [
++        #     exact_match_score(pred, ans) 
++        #     for pred, ans in zip(data['prediction'], data['answer'])
++        # ]
++        # 
++        # data['case_insensitive_match'] = [
++        #     case_insensitive_match_score(pred, ans)
++        #     for pred, ans in zip(data['prediction'], data['answer'])
++        # ]
++        # 
++        # data['similarity'] = [
++        #     calculate_formula_similarity(pred, ans)
++        #     for pred, ans in zip(data['prediction'], data['answer'])
++        # ]
++        # 
++        # # 保存详细结果
++        # storage = get_intermediate_file_path(eval_file, '_detailed')
++        # dump(data, storage)
++        # 
++        # # 计算总体指标
++        # results = {
++        #     'Exact Match Accuracy': [data['exact_match'].mean() * 100],
++        #     'Case-Insensitive Accuracy': [data['case_insensitive_match'].mean() * 100],
++        #     'Average Similarity': [data['similarity'].mean() * 100],
++        #     'Total Samples': [len(data)],
++        # }
++        # 
++        # # 如果有类别信息，计算分类别的准确率
++        # if 'category' in data:
++        #     categories = data['category'].unique()
++        #     for cat in categories:
++        #         if pd.isna(cat):
++        #             continue
++        #         cat_data = data[data['category'] == cat]
++        #         results[f'{cat}_Exact_Match'] = [cat_data['exact_match'].mean() * 100]
++        #         results[f'{cat}_Samples'] = [len(cat_data)]
++        # 
++        # # 如果有难度信息，计算分难度的准确率
++        # if 'difficulty' in data:
++        #     difficulties = data['difficulty'].unique()
++        #     for diff in difficulties:
++        #         if pd.isna(diff):
++        #             continue
++        #         diff_data = data[data['difficulty'] == diff]
++        #         results[f'{diff}_Exact_Match'] = [diff_data['exact_match'].mean() * 100]
++        #         results[f'{diff}_Samples'] = [len(diff_data)]
++        # 
++        # # 转换为 DataFrame
++        # results_df = pd.DataFrame(results)
++        # 
++        # # 保存评测结果
++        # score_file = get_intermediate_file_path(eval_file, '_score', 'csv')
++        # dump(results_df, score_file)
++        # 
++        # return results_df
++        
++        return 1
++
++
++class ChemFormulaRecognitionOrganic(ChemFormulaRecognition):
++    """有机化合物分子式识别 Benchmark"""
++    
++    DATASET_URL = {
++        'ChemFormula_Organic': '',
++    }
++    
++    DATASET_MD5 = {
++        'ChemFormula_Organic': None,
++    }
++
++
++class ChemFormulaRecognitionInorganic(ChemFormulaRecognition):
++    """无机化合物分子式识别 Benchmark"""
++    
++    DATASET_URL = {
++        'ChemFormula_Inorganic': '',
++    }
++    
++    DATASET_MD5 = {
++        'ChemFormula_Inorganic': None,
++    }
++
++
++class ChemFormulaRecognitionStructural(ChemFormulaRecognition):
++    """结构式识别 Benchmark"""
++    
++    DATASET_URL = {
++        'ChemFormula_Structural': '',
++    }
++    
++    DATASET_MD5 = {
++        'ChemFormula_Structural': None,
++    }
++
+diff --git a/vlmeval/dataset/image_base.py b/vlmeval/dataset/image_base.py
+index 77b46a2..3499d7a 100644
+--- a/vlmeval/dataset/image_base.py
++++ b/vlmeval/dataset/image_base.py
+@@ -37,11 +37,12 @@ class ImageBaseDataset:
+     DATASET_URL = {}
+     DATASET_MD5 = {}
+ 
+-    def __init__(self, dataset='MMBench', skip_noimg=True):
++    def __init__(self, dataset='MMBench', skip_noimg=True, use_image_url=False):
+         ROOT = LMUDataRoot()
+         # You can override this variable to save image files to a different directory
+         self.dataset_name = dataset
+         self.img_root = osp.join(ROOT, 'images', img_root_map(dataset))
++        self.use_image_url = use_image_url
+ 
+         data = self.load_data(dataset)
+         self.skip_noimg = skip_noimg
+@@ -188,7 +189,11 @@ class ImageBaseDataset:
+         if isinstance(line, int):
+             line = self.data.iloc[line]
+ 
+-        if self.meta_only:
++        # Check if use_image_url is enabled and image_url exists
++        if self.use_image_url and 'image_url' in line and pd.notna(line['image_url']) and line['image_url']:
++            # Use URL instead of local path
++            tgt_path = toliststr(line['image_url'])
++        elif self.meta_only:
+             tgt_path = toliststr(line['image_path'])
+         else:
+             tgt_path = self.dump_image(line)
+diff --git a/vlmeval/smp/file.py b/vlmeval/smp/file.py
+index 53925e0..7985241 100644
+--- a/vlmeval/smp/file.py
++++ b/vlmeval/smp/file.py
+@@ -490,25 +490,76 @@ def prepare_reuse_files(pred_root_meta, eval_id, model_name, dataset_name, reuse
+     # reuse flag is set
+     prev_pred_roots = ls(pred_root_meta, mode='dir')
+     prev_pred_roots.sort()
+-    prev_pred_roots.remove(work_dir)
++    if work_dir in prev_pred_roots:
++        prev_pred_roots.remove(work_dir)
+ 
+     files = ls(work_dir, match=f'{model_name}_{dataset_name}.')
+     prev_file = None
+     prev_aux_files = None
++    all_prev_files = []
+     if len(files):
+         pass
+     else:
++        # Collect all prediction files from all history directories
+         for root in prev_pred_roots[::-1]:
+             fs = ls(root, match=f'{model_name}_{dataset_name}.')
+             if len(fs):
+-                if len(fs) > 1:
+-                    warnings.warn(f'Multiple candidates in {root}: {fs}. Will use {fs[0]}')
+-                prev_file = fs[0]
+-                prev_aux_files = fetch_aux_files(prev_file)
+-                break
++                # Filter out pkl files, only get the main prediction file (xlsx/tsv/json)
++                main_files = [f for f in fs if not f.endswith('.pkl')]
++                if len(main_files):
++                    all_prev_files.extend(main_files)
++                    if prev_file is None:
++                        if len(main_files) > 1:
++                            warnings.warn(f'Multiple candidates in {root}: {main_files}. Will use {main_files[0]}')
++                        prev_file = main_files[0]
++                        prev_aux_files = fetch_aux_files(prev_file)
++        
++        # Copy the latest main prediction file
+         if prev_file is not None:
+             warnings.warn(f'--reuse is set, will reuse prediction file {prev_file}')
+             os.system(f'cp {prev_file} {work_dir}')
++        
++        # Collect and merge all pkl files from all history directories
++        all_pkl_files = []
++        for root in prev_pred_roots[::-1]:
++            # Look for _PREV.pkl files
++            prev_pkl = osp.join(root, f'{model_name}_{dataset_name}_PREV.pkl')
++            if osp.exists(prev_pkl):
++                all_pkl_files.append(prev_pkl)
++            # Look for _supp.pkl files (non-distributed case)
++            supp_pkl = osp.join(root, f'{model_name}_{dataset_name}_supp.pkl')
++            if osp.exists(supp_pkl):
++                all_pkl_files.append(supp_pkl)
++            # Look for rank-specific pkl files (e.g., 0_8_dataset.pkl, 1_8_dataset.pkl)
++            # Format: {rank}_{world_size}_{dataset_name}.pkl
++            rank_pkl_files = ls(root, match=f'*_{dataset_name}.pkl')
++            # Filter to only include rank-specific files (exclude _PREV.pkl and _supp.pkl as they are handled separately)
++            rank_pkl_files = [f for f in rank_pkl_files 
++                             if f'{model_name}_{dataset_name}_PREV.pkl' not in f 
++                             and f'{model_name}_{dataset_name}_supp.pkl' not in f]
++            all_pkl_files.extend(rank_pkl_files)
++        
++        # Merge all pkl files if any exist
++        if len(all_pkl_files):
++            merged_data = {}
++            for pkl_file in all_pkl_files:
++                # Skip empty files to avoid "Ran out of input" error
++                if osp.exists(pkl_file) and osp.getsize(pkl_file) == 0:
++                    warnings.warn(f'Skipping empty pkl file {pkl_file}')
++                    continue
++                try:
++                    data = load(pkl_file)
++                    if isinstance(data, dict):
++                        merged_data.update(data)
++                        warnings.warn(f'--reuse is set, loaded pkl records from {pkl_file}')
++                except Exception as e:
++                    warnings.warn(f'Failed to load pkl file {pkl_file}: {e}')
++            
++            # Save merged data to PREV.pkl in current work_dir
++            if merged_data:
++                prev_pkl_target = osp.join(work_dir, f'{model_name}_{dataset_name}_PREV.pkl')
++                dump(merged_data, prev_pkl_target)
++                warnings.warn(f'--reuse is set, merged {len(merged_data)} records from {len(all_pkl_files)} pkl files into {prev_pkl_target}')
+ 
+     if not reuse_aux:
+         warnings.warn(f'--reuse-aux is not set, all auxiliary files in {work_dir} are removed. ')
+diff --git a/vlmeval/vlm/__init__.py b/vlmeval/vlm/__init__.py
+index 996e3f9..56c497a 100644
+--- a/vlmeval/vlm/__init__.py
++++ b/vlmeval/vlm/__init__.py
+@@ -46,7 +46,7 @@ from .xcomposer import (
+     XComposer2d5,
+ )
+ from .yi_vl import Yi_VL
+-from .internvl import InternVLChat
++from .internvl import InternVLChat, ChemVLMChat
+ from .deepseek_vl import DeepSeekVL
+ from .deepseek_vl2 import DeepSeekVL2
+ from .janus import Janus
+@@ -111,3 +111,4 @@ from .qtunevl import (
+ )
+ from .logics import Logics_Thinking
+ from .cosmos import Cosmos
++from .chemdfm_x import ChemDFM_X
+diff --git a/vlmeval/vlm/chemdfm_x.py b/vlmeval/vlm/chemdfm_x.py
+new file mode 100644
+index 0000000..ad31fdc
+--- /dev/null
++++ b/vlmeval/vlm/chemdfm_x.py
+@@ -0,0 +1,542 @@
++"""
++ChemDFM-X Model Integration for VLMEvalKit
++
++This module integrates ChemDFM-X, a multimodal chemistry model, into VLMEvalKit.
++It supports inference with images from URLs by downloading them to temporary paths.
++
++Usage:
++    model = ChemDFM_X(model_path="OpenDFM/ChemDFM-X-v1.0-13B")
++    
++    # Using local image
++    result = model.generate_inner([
++        {'type': 'image', 'value': '/path/to/image.png'},
++        {'type': 'text', 'value': 'What is the SMILES notation?'}
++    ])
++    
++    # Using image URL (will be automatically downloaded)
++    result = model.generate_inner([
++        {'type': 'image', 'value': 'https://example.com/image.png'},
++        {'type': 'text', 'value': 'What is the SMILES notation?'}
++    ])
++"""
++
++import sys
++import os
++import tempfile
++import requests
++import torch
++import hashlib
++from pathlib import Path
++from typing import List, Union, Dict
++from functools import lru_cache
++
++from .base import BaseModel
++from ..smp import get_logger
++
++# Add ChemDFM-X to the path
++CHEMDFM_X_ROOT = os.environ.get('CHEMDFM_X_ROOT', '/mnt/petrelfs/lilinye/githubProjects/ChemDFM-X')
++if os.path.exists(CHEMDFM_X_ROOT) and CHEMDFM_X_ROOT not in sys.path:
++    sys.path.insert(0, CHEMDFM_X_ROOT)
++
++logger = get_logger('ChemDFM_X')
++
++
++class ChemDFM_X(BaseModel):
++    """
++    ChemDFM-X model wrapper for VLMEvalKit.
++    
++    Supports multimodal chemistry inference with images.
++    Can download images from URLs to temporary paths before processing.
++    """
++    
++    INTERLEAVE = False
++    
++    def use_custom_prompt(self, dataset_name=None):
++        """Return whether to use custom prompt for this dataset."""
++        return True
++    
++    def __init__(self, 
++                 model_path: str = "OpenDFM/ChemDFM-X-v1.0-13B",
++                 max_new_tokens: int = 1024,
++                 device_map=None,
++                 cache_dir: str = None,
++                 **kwargs):
++        """
++        Initialize ChemDFM-X model.
++        
++        Args:
++            model_path: Path to the ChemDFM-X model (local or HuggingFace model ID)
++            max_new_tokens: Maximum number of new tokens to generate
++            device_map: Device mapping for model loading (e.g., 'auto')
++            cache_dir: Directory to cache HuggingFace models. If None, uses environment variable
++                       HUGGINGFACE_HUB_CACHE or HF_HOME, or default ~/.cache/huggingface/hub
++            **kwargs: Additional arguments
++        """
++        super().__init__()
++        
++        self.model_path = model_path
++        self.max_new_tokens = max_new_tokens
++        self.device_map = device_map
++        self.kwargs = kwargs
++        
++        # Set HuggingFace cache directory
++        if cache_dir is not None:
++            os.environ['HUGGINGFACE_HUB_CACHE'] = cache_dir
++            logger.info(f"Set HuggingFace cache directory to: {cache_dir}")
++        elif 'HUGGINGFACE_HUB_CACHE' not in os.environ:
++            # Default to the specified directory
++            default_cache_dir = '/mnt/dhwfile/MinerU4S/lilinye/cache/hugging_face/hub'
++            if os.path.exists(default_cache_dir):
++                os.environ['HUGGINGFACE_HUB_CACHE'] = default_cache_dir
++                logger.info(f"Using default HuggingFace cache directory: {default_cache_dir}")
++        
++        # Will be initialized lazily
++        self.tokenizer = None
++        self.model = None
++        self.device = None
++        self._model_loaded = False
++        
++        # Import ChemDFM-X dependencies when needed
++        self._import_chemdfm_x()
++    
++    def _import_chemdfm_x(self):
++        """Import ChemDFM-X dependencies."""
++        try:
++            # Dynamically import to avoid errors if ChemDFM-X is not installed
++            from dschat.utils.utils import load_hf_tokenizer
++            from dschat.utils.model.model_utils_figure import create_hf_model
++            from models.modeling_chemdfm_defaultmm_lora import ChemDFMMMForPreTraining
++            
++            self.load_hf_tokenizer = load_hf_tokenizer
++            self.create_hf_model = create_hf_model
++            self.ChemDFMMMForPreTraining = ChemDFMMMForPreTraining
++            self._dependencies_loaded = True
++        except ImportError as e:
++            logger.error(f"Failed to import ChemDFM-X dependencies: {e}")
++            logger.error(f"Please ensure CHEMDFM_X_ROOT is set correctly: {CHEMDFM_X_ROOT}")
++            self._dependencies_loaded = False
++    
++    def _load_model_if_needed(self):
++        """Lazy load the model."""
++        if self._model_loaded:
++            return
++        
++        if not self._dependencies_loaded:
++            raise ImportError("ChemDFM-X dependencies not loaded. Check CHEMDFM_X_ROOT.")
++        
++        logger.info("Loading ChemDFM-X tokenizer...")
++        self.tokenizer = self.load_hf_tokenizer(self.model_path, fast_tokenizer=True)
++        
++        logger.info("Loading ChemDFM-X model...")
++        self.device = torch.device("cuda:0") if torch.cuda.is_available() else torch.device("cpu")
++        
++        self.model = self.create_hf_model(
++            self.ChemDFMMMForPreTraining, 
++            self.model_path, 
++            self.tokenizer,
++            device_map=self.device_map
++        ).half()
++        
++        if self.device_map is None:
++            self.model = self.model.to(self.device)
++        self.model.eval()
++        
++        self._model_loaded = True
++        logger.info("ChemDFM-X model loaded successfully")
++    
++    def download_image_from_url(self, url: str, dest_dir: str = None) -> str:
++        """
++        Download an image from URL to a temporary file.
++        
++        Args:
++            url: URL of the image
++            dest_dir: Destination directory (optional, uses temp dir if not provided)
++            
++        Returns:
++            Local file path of the downloaded image
++        """
++        if dest_dir is None:
++            dest_dir = tempfile.gettempdir()
++        
++        # Create a unique filename based on URL
++        url_hash = hashlib.md5(url.encode()).hexdigest()
++        file_extension = os.path.splitext(url.split('?')[0])[1] or '.png'
++        temp_filename = f"chemdfm_{url_hash}{file_extension}"
++        temp_path = os.path.join(dest_dir, temp_filename)
++        
++        # Download if not already downloaded
++        if not os.path.exists(temp_path):
++            logger.info(f"Downloading image from {url}")
++            try:
++                headers = {
++                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
++                }
++                response = requests.get(url, timeout=30, headers=headers)
++                response.raise_for_status()
++                with open(temp_path, 'wb') as f:
++                    f.write(response.content)
++                logger.info(f"Downloaded image to {temp_path}")
++            except Exception as e:
++                logger.error(f"Failed to download image from {url}: {e}")
++                raise
++        else:
++            logger.info(f"Using cached image: {temp_path}")
++        
++        return temp_path
++    
++    def preprocess_message(self, message: List[dict], dataset=None) -> dict:
++        """
++        Preprocess message to extract images and text.
++        Handles both local paths and URLs.
++        
++        Args:
++            message: List of message dictionaries with 'type' and 'value' keys
++            dataset: Dataset name (optional)
++            
++        Returns:
++            Dictionary with 'text' and 'image_paths' keys
++        """
++        text_parts = []
++        image_paths = []
++        
++        for item in message:
++            if item['type'] == 'text':
++                text_parts.append(item['value'])
++            elif item['type'] == 'image':
++                image_path = item['value']
++                
++                # Check if it's a URL or local path
++                if image_path.startswith('http://') or image_path.startswith('https://'):
++                    # Download from URL
++                    try:
++                        local_path = self.download_image_from_url(image_path)
++                        image_paths.append(local_path)
++                    except Exception as e:
++                        logger.error(f"Failed to download image from URL: {image_path}")
++                        logger.error(f"Error: {e}")
++                        continue
++                # Local path
++                elif os.path.exists(image_path):
++                    image_paths.append(image_path)
++                else:
++                    logger.warning(f"Image file not found: {image_path}")
++        
++        return {
++            'text': ' '.join(text_parts) if text_parts else '',
++            'image_paths': image_paths
++        }
++    
++    def generate_inner(self, message, dataset=None):
++        """
++        Generate response from message (required by BaseModel).
++        
++        Args:
++            message: Input message (str, dict, or list of dicts)
++            dataset: Dataset name (optional)
++            
++        Returns:
++            Generated response text
++        """
++        # Load model if needed
++        self._load_model_if_needed()
++        
++        # Handle different input types
++        if isinstance(message, str):
++            # Simple text input
++            return self._generate_text_response(message)
++        elif isinstance(message, dict):
++            # Single dict
++            message = [message]
++        
++        # Preprocess message to handle URLs
++        processed = self.preprocess_message(message, dataset)
++        
++        if not processed['image_paths']:
++            # No images, text-only
++            return self._generate_text_response(processed['text'])
++        
++        # Has images, use ChemDFM-X inference
++        return self._generate_with_images(processed['text'], processed['image_paths'])
++    
++    def _generate_text_response(self, text: str) -> str:
++        """Generate response for text-only input."""
++        logger.warning("Text-only inference not fully implemented for ChemDFM-X")
++        return "Text-only inference not supported. Please provide an image."
++    
++    def _generate_with_images(self, text: str, image_paths: List[str]) -> str:
++        """
++        Generate response using ChemDFM-X with images.
++        
++        Args:
++            text: Input text/prompt
++            image_paths: List of image file paths
++            
++        Returns:
++            Generated response text
++        """
++        try:
++            # Dynamically import ChemDFM-X inference utilities
++            from infer.constants import (
++                MOLSTART, MOLEND, DEFAULT_PAD_TOKEN, DEFAULT_MM_START, 
++                DEFAULT_MM_END, DEFAULT_MM_TOKENS, MODALITY_LIST
++            )
++            from infer.prompts import prompt_input_normal as prompt_input
++            from infer.prepare_data import prepare_infer_data
++            from infer.utils import generate, text_answer_postprocess, to_device
++            
++            # Prepare data for ChemDFM-X inference
++            data_example = {
++                'instruction': text,
++                'input': '[MM_FILE_I]',  # Image input token
++                'mm_input_files': image_paths
++            }
++            
++            data = [data_example]
++            
++            # Prepare multimodal inputs
++            data, mm_embedding, mm_length = prepare_infer_data(data)
++            
++            # Build prompt
++            args = type('Args', (), {
++                'mm_input_format': 'only_mm',
++                'without_wrapping': False,
++                'num_beams': 1,
++                'max_new_tokens': self.max_new_tokens,
++                'input_file': ''  # Required by prompts
++            })()
++            
++            prompt = prompt_input(data[0], args, shorter=10000, conversational=False)
++            
++            logger.info(f"Generated prompt: {prompt}")
++            logger.info(f"Image paths: {image_paths}")
++            logger.info(f"Instruction: {text}")
++            
++            # Run inference using the response function logic
++            response_text = self._run_inference(
++                prompt, mm_embedding, mm_length, data[0]['modality']
++            )
++            
++            return response_text
++            
++        except torch.cuda.OutOfMemoryError:
++            logger.error("CUDA Out of Memory Error")
++            return "Input too long or model too large"
++        except Exception as e:
++            logger.error(f"Error during generation: {e}")
++            import traceback
++            traceback.print_exc()
++            return f"Error during generation: {str(e)}"
++    
++    def _run_inference(self, inputs: str, mm_embedding: dict, mm_length: dict, modality_list: list) -> str:
++        """
++        Run inference using ChemDFM-X model.
++        
++        Args:
++            inputs: Input prompt text
++            mm_embedding: Multimodal embeddings
++            mm_length: Multimodal length information
++            modality_list: List of modalities
++            
++        Returns:
++            Generated response text
++        """
++        from infer.constants import (
++            MOLSTART, MOLEND, DEFAULT_PAD_TOKEN, DEFAULT_MM_START, 
++            DEFAULT_MM_END, DEFAULT_MM_TOKENS, MODALITY_LIST
++        )
++        from infer.utils import generate, text_answer_postprocess, to_device
++        
++        if MOLSTART not in inputs or MOLEND not in inputs:
++            if MOLSTART in inputs or MOLEND in inputs:
++                logger.warning(f'{MOLSTART} and {MOLEND} token not matched.')
++            else:
++                logger.info('Processing with NO mm inputs.')
++            final_input = self.tokenizer(inputs, return_tensors="pt").to(self.device).input_ids
++            mm_masks = None
++            mm_inputs = None
++        else:
++            mm_pad_id = self.tokenizer.convert_tokens_to_ids([DEFAULT_PAD_TOKEN])[0]
++            mm_token_id = self.tokenizer.convert_tokens_to_ids([DEFAULT_MM_TOKENS])[0]
++            mm_start_id = self.tokenizer.convert_tokens_to_ids([DEFAULT_MM_START])[0]
++            mm_end_id = self.tokenizer.convert_tokens_to_ids([DEFAULT_MM_END])[0]
++
++            logger.info('Processing with mm inputs')
++            logger.info(f'Raw inputs: {inputs}')
++            
++            ############# Parse the wrapped MM_FILE_TOKENS into MM_TOKENS #############
++            inputs_split = inputs.split(MOLSTART)
++            input_text, input_smiles = inputs_split[0], []
++
++            try:
++                smiles_index = 0
++                for split in inputs_split[1:]:
++                    split_smiles, split_text = split.split(MOLEND)
++                    processed_smiles = ''
++
++                    for smiles_by_dot in split_smiles.split('.'):
++                        for smiles in smiles_by_dot.split('>'):
++                            if smiles != '':
++                                modality = modality_list[smiles_index]
++                                smiles_index += 1
++                                if modality == 'mol_figure_2d':
++                                    processed_smiles += DEFAULT_MM_START + DEFAULT_MM_TOKENS * (mm_length[smiles] * 73 - 1) + DEFAULT_MM_END + '1'
++                                elif modality == 'mol_ir' or modality == 'mol_ms' or modality == 'mol_geometry_3d' or modality == 'mol_graph_2d':
++                                    processed_smiles += DEFAULT_MM_START + DEFAULT_MM_TOKENS * mm_length[smiles] + DEFAULT_MM_END + '1'
++                                else:
++                                    raise ValueError(f'modality: {modality} not supported.')
++                                input_smiles.append(smiles)
++
++                            processed_smiles += '>'
++                        processed_smiles = processed_smiles[:-1] + '.'
++                    processed_smiles = processed_smiles[:-1]
++                    input_text += processed_smiles + split_text
++            except KeyError as e:
++                logger.error(f'Smiles {e} not found in input \'{inputs}\'')
++                return 'Smiles not found'
++            
++            logger.info(f'Processed inputs: {input_text}')
++
++            ###################### Prepare the tokens and masks #########################
++            final_input = self.tokenizer(input_text).input_ids
++            end_index = 0
++            while mm_end_id in final_input[end_index:]:
++                tmp = final_input[end_index:].index(mm_end_id)
++                end_index += tmp + 1
++                final_input = final_input[:end_index] + final_input[end_index + 2:]
++            final_input = torch.tensor([final_input], dtype=torch.long).to(self.device)
++
++            input_ids = final_input[0]
++            start_idx = torch.where(input_ids == mm_start_id)[0].tolist()
++            end_idx = torch.where(input_ids == mm_end_id)[0].tolist()
++
++            mm_masks = torch.zeros((len(MODALITY_LIST), input_ids.size(0)), dtype=torch.long).to(self.device)
++            for start, end, mod in zip(start_idx, end_idx, modality_list):
++                mod_idx = MODALITY_LIST.index(mod)
++                mm_masks[mod_idx][start] = 1
++                mm_masks[mod_idx][end] = 2
++                mm_masks[mod_idx][start + 1:end] = -1
++                input_ids[start:end + 1] = mm_pad_id
++
++            ##################### new mm_inputs for raw input ###########################
++            mm_data = mm_embedding
++            mm_inputs = {modality:[] for modality in MODALITY_LIST}
++
++            ##################### Special treatment for figure ##########################
++            start_idx = torch.where(mm_masks[2] == 1)[0].tolist()
++            end_idx = torch.where(mm_masks[2] == 2)[0].tolist()
++            assert len(start_idx) == len(end_idx)
++
++            is_all_smiles_found = True
++            for index, single_smiles in enumerate(input_smiles):
++                if single_smiles not in mm_data:
++                    from infer.utils import normalize_smiles
++                    single_smiles = normalize_smiles(single_smiles)
++
++                if single_smiles in mm_data:
++                    modality = modality_list[index]
++                    if modality == 'mol_figure_2d':
++                        mm_inputs[modality].append({'data_path': mm_data[single_smiles], 'index': 1})
++                        figure_idx_pos = torch.arange(start_idx.pop(0), end_idx.pop(0), 73)[1:]
++                        if len(figure_idx_pos) > 0:
++                            assert len(figure_idx_pos) > 1
++                            if mm_length[single_smiles] > 0:
++                                mm_masks[2][figure_idx_pos] = torch.arange(len(figure_idx_pos), dtype=torch.long, device=self.device) + 3
++                            else:
++                                mm_masks[2][figure_idx_pos[0]] = 3
++                                mm_masks[2][figure_idx_pos[1:]] = torch.arange(len(figure_idx_pos) - 1, dtype=torch.long, device=self.device) + 15
++                    else:
++                        mm_inputs[modality].append(mm_data[single_smiles])
++                else:
++                    is_all_smiles_found = False
++                    logger.error(f'smiles [{single_smiles}] not found in eval, ignore the sample')
++                    break
++
++            if not is_all_smiles_found:
++                raise ValueError('smiles not found, not handled')
++
++            ############### prepare modality data in encoder input structure ############
++            from infer.prepare_data import (
++                prepare_mol_figure_2d_data, prepare_mol_geometry_3d, 
++                prepare_mol_graph_2d, prepare_mol_ms, prepare_mol_ir
++            )
++            
++            for modality in MODALITY_LIST:
++                if len(mm_inputs[modality]) == 0:
++                    mm_inputs[modality] = None
++                    continue
++
++                if modality == 'mol_figure_2d':
++                    mm_inputs['mol_figure_2d'] = prepare_mol_figure_2d_data(mm_inputs[modality], mm_masks)
++                elif modality == 'mol_geometry_3d':
++                    mm_inputs['mol_geometry_3d'] = prepare_mol_geometry_3d(mm_inputs[modality], mm_masks)
++                elif modality == 'mol_graph_2d':
++                    mm_inputs['mol_graph_2d'] = prepare_mol_graph_2d(mm_inputs[modality], mm_masks)
++                elif modality == 'mol_ms':
++                    mm_inputs['mol_ms'] = prepare_mol_ms(mm_inputs[modality], mm_masks)
++                elif modality == 'mol_ir':
++                    mm_inputs['mol_ir'] = prepare_mol_ir(mm_inputs[modality], mm_masks)
++                else:
++                    raise ValueError(f'modality {modality} not supported')
++            
++            mm_inputs = to_device(mm_inputs, self.device)
++
++            # Add unsqueeze to support multi-modality in 1 prompt
++            mm_masks = mm_masks.unsqueeze(0)
++
++            logger.info(f'Origin input: {inputs}')
++
++        try:
++            gen_output = generate(self.model, self.tokenizer, final_input, mm_masks, mm_inputs, 
++                                num_beams=1, max_new_tokens=self.max_new_tokens, do_sample=False)
++        except torch.cuda.OutOfMemoryError:
++            return "Input too long"
++
++        post_func = text_answer_postprocess
++        logger.info(f"Generated output: {gen_output[0]}")
++        
++        return post_func(gen_output[0], cut_prefix=len(self.tokenizer.decode(final_input[0], skip_special_tokens=True)))
++    
++    def build_prompt(self, line, dataset):
++        """
++        Build custom prompt for a specific dataset.
++        
++        Args:
++            line: Data line from dataset (dict with 'image_url' or 'image' and 'question')
++            dataset: Dataset name
++            
++        Returns:
++            Message format suitable for generate_inner
++        """
++        # Extract image path/URL and question
++        if isinstance(line, dict):
++            image_url = line.get('image_url', '')
++            question = line.get('question', '')
++        elif hasattr(line, '__dict__'):
++            image_url = getattr(line, 'image_url', '')
++            question = getattr(line, 'question', '')
++        else:
++            image_url = ''
++            question = ''
++        
++        # Build message
++        message = []
++        
++        if image_url:
++            # Check if it's a URL or local path
++            if image_url.startswith('http://') or image_url.startswith('https://'):
++                # Download from URL to local path
++                try:
++                    local_path = self.download_image_from_url(image_url)
++                    message.append({'type': 'image', 'value': local_path})
++                except Exception as e:
++                    logger.error(f"Failed to download image from URL: {image_url}")
++                    logger.error(f"Error: {e}")
++                    # Skip this image if download fails
++            else:
++                # Local path
++                message.append({'type': 'image', 'value': image_url})
++        
++        if question:
++            message.append({'type': 'text', 'value': question})
++        
++        return message
+\ No newline at end of file
+diff --git a/vlmeval/vlm/internvl/__init__.py b/vlmeval/vlm/internvl/__init__.py
+index f1b4cb4..a6f6f0e 100644
+--- a/vlmeval/vlm/internvl/__init__.py
++++ b/vlmeval/vlm/internvl/__init__.py
+@@ -1,3 +1,4 @@
+ from .internvl_chat import InternVLChat
++from .chemvlm_chat import ChemVLMChat
+ 
+-__all__ = ['InternVLChat']
++__all__ = ['InternVLChat', 'ChemVLMChat']
+diff --git a/vlmeval/vlm/internvl/chemvlm_chat.py b/vlmeval/vlm/internvl/chemvlm_chat.py
+new file mode 100644
+index 0000000..8425c03
+--- /dev/null
++++ b/vlmeval/vlm/internvl/chemvlm_chat.py
+@@ -0,0 +1,182 @@
++"""
++ChemVLM-26B Model Chat Implementation
++Based on the original test_chemvlm.py script
++"""
++
++import torch
++import torchvision.transforms as T
++from PIL import Image
++from transformers import AutoTokenizer, AutoModel
++from torchvision.transforms.functional import InterpolationMode
++
++from .utils import load_image, build_transform, dynamic_preprocess
++from ..base import BaseModel
++from ...dataset import DATASET_MODALITY
++from ...smp import *
++
++IMAGENET_MEAN = (0.485, 0.456, 0.406)
++IMAGENET_STD = (0.229, 0.224, 0.225)
++
++
++class ChemVLMChat(BaseModel):
++    """ChemVLM-26B Chat Model"""
++    
++    INSTALL_REQ = False
++    INTERLEAVE = True
++    
++    def __init__(self,
++                 model_path='AI4Chem/ChemVLM-26B',
++                 image_size=448,
++                 max_num=6,
++                 device_map='auto',
++                 torch_dtype=torch.bfloat16,
++                 **kwargs):
++        """
++        Initialize ChemVLM-26B model.
++        
++        Args:
++            model_path: Path to the model
++            image_size: Image size for processing (default: 448)
++            max_num: Maximum number of image tiles (default: 6)
++            device_map: Device mapping strategy ('auto' or 'cuda')
++            torch_dtype: Torch data type (default: bfloat16)
++            **kwargs: Generation config parameters
++        """
++        super().__init__()
++        
++        self.model_path = model_path
++        self.image_size = image_size
++        self.max_num = max_num
++        self.device = 'cuda' if torch.cuda.is_available() else 'cpu'
++        
++        # Load model
++        print(f"Loading ChemVLM model from {model_path}...")
++        self.model = AutoModel.from_pretrained(
++            model_path,
++            torch_dtype=torch_dtype,
++            low_cpu_mem_usage=True,
++            trust_remote_code=True,
++            device_map=device_map
++        ).eval()
++        
++        # Load tokenizer
++        self.tokenizer = AutoTokenizer.from_pretrained(
++            model_path,
++            trust_remote_code=True
++        )
++        
++        # Generation config
++        self.kwargs = kwargs
++        if 'max_new_tokens' not in self.kwargs:
++            self.kwargs['max_new_tokens'] = 512
++        if 'num_beams' not in self.kwargs:
++            self.kwargs['num_beams'] = 1
++        if 'do_sample' not in self.kwargs:
++            self.kwargs['do_sample'] = False
++        
++        print(f"ChemVLM model loaded successfully on {self.device}")
++    
++    def set_max_num(self, dataset):
++        """Set max_num based on dataset requirements."""
++        self.total_max_num = 64
++        if dataset is None:
++            self.max_num = 6
++            return
++        
++        # High-resolution datasets
++        res_12_datasets = ['ChartQA_TEST', 'MMMU_DEV_VAL', 'MMMU_TEST', 'MME-RealWorld',
++                           'VCR_EN', 'VCR_ZH', 'OCRVQA', 'BMMR']
++        res_18_datasets = ['DocVQA_VAL', 'DocVQA_TEST', 'DUDE', 'MMLongBench_DOC', 'SLIDEVQA']
++        res_24_datasets = ['InfoVQA_VAL', 'InfoVQA_TEST', 'OCRBench', 'HRBench4K', 'HRBench8K']
++        
++        if DATASET_MODALITY(dataset) == 'VIDEO':
++            self.max_num = 1
++        elif listinstr(res_12_datasets, dataset):
++            self.max_num = 12
++        elif listinstr(res_18_datasets, dataset):
++            self.max_num = 18
++        elif listinstr(res_24_datasets, dataset):
++            self.max_num = 24
++        else:
++            self.max_num = 6
++    
++    def generate_inner(self, message, dataset=None):
++        """
++        Generate response based on input message.
++        
++        Args:
++            message: List of dicts with 'type' and 'value' keys
++            dataset: Dataset name (optional)
++        
++        Returns:
++            str: Generated response
++        """
++        # Set max_num based on dataset
++        self.set_max_num(dataset)
++        
++        # Extract text prompt
++        prompt = '\n'.join([x['value'] for x in message if x['type'] == 'text'])
++        
++        # Extract image paths
++        image_paths = [x['value'] for x in message if x['type'] == 'image']
++        image_num = len(image_paths)
++        
++        if image_num == 0:
++            # No image, just text
++            pixel_values = None
++        elif image_num == 1:
++            # Single image
++            pixel_values = load_image(
++                image_paths[0],
++                input_size=self.image_size,
++                max_num=self.max_num
++            ).to(self.device).to(torch.bfloat16)
++        else:
++            # Multiple images
++            pixel_values_list = []
++            for img_path in image_paths:
++                pixel_values_list.append(
++                    load_image(
++                        img_path,
++                        input_size=self.image_size,
++                        max_num=self.max_num
++                    ).to(self.device).to(torch.bfloat16)
++                )
++            pixel_values = torch.cat(pixel_values_list, dim=0)
++        
++        # Prepare generation config
++        generation_config = dict(
++            num_beams=self.kwargs.get('num_beams', 1),
++            max_new_tokens=self.kwargs.get('max_new_tokens', 512),
++            do_sample=self.kwargs.get('do_sample', False),
++        )
++        
++        # Add other generation parameters if provided
++        for key in ['temperature', 'top_p', 'top_k', 'repetition_penalty']:
++            if key in self.kwargs:
++                generation_config[key] = self.kwargs[key]
++        
++        # Generate response
++        with torch.no_grad():
++            if pixel_values is None:
++                # Text-only generation (if supported)
++                response = self.model.chat(
++                    self.tokenizer,
++                    pixel_values=None,
++                    question=prompt,
++                    generation_config=generation_config
++                )
++            else:
++                response = self.model.chat(
++                    self.tokenizer,
++                    pixel_values=pixel_values,
++                    question=prompt,
++                    generation_config=generation_config
++                )
++        
++        # Handle tuple response (response, history)
++        if isinstance(response, tuple):
++            response = response[0]
++        
++        return response
++
+diff --git a/vlmeval/vlm/internvl/internvl_chat.py b/vlmeval/vlm/internvl/internvl_chat.py
+index 1ebb51c..40ea8b1 100644
+--- a/vlmeval/vlm/internvl/internvl_chat.py
++++ b/vlmeval/vlm/internvl/internvl_chat.py
+@@ -174,15 +174,32 @@ class InternVLChat(BaseModel):
+ 
+         if use_lmdeploy:
+             from lmdeploy import TurbomindEngineConfig, PytorchEngineConfig, VisionConfig, pipeline
+-            engine_type = PytorchEngineConfig if "internvl3_5" in model_path.lower() else TurbomindEngineConfig
+-            vision_config = VisionConfig(max_batch_size=4)
++            # 对于非 internvl3_5 模型，如果模型未转换为 turbomind 格式，使用 PytorchEngineConfig 更稳定
++            # 如果确定模型已转换为 turbomind 格式，可以使用 TurbomindEngineConfig
++            use_turbomind = kwargs.get('use_turbomind', False)  # 默认使用 PytorchEngine
++            if use_turbomind and "internvl3_5" not in model_path.lower():
++                engine_type = TurbomindEngineConfig
++                print(f"[lmdeploy] Using TurbomindEngine for {model_path}")
++            else:
++                engine_type = PytorchEngineConfig
++                print(f"[lmdeploy] Using PytorchEngine for {model_path} (more stable, use_turbomind=True to enable TurbomindEngine)")
++            
++            # 增大 max_batch_size 以提高吞吐量（根据显存调整，8-16 通常较好）
++            # 如果显存不足，可以降低到 4
++            max_batch = kwargs.get('lmdeploy_max_batch_size', 8)
++            vision_config = VisionConfig(max_batch_size=max_batch)
+             num_gpus = torch.cuda.device_count()
++            print(f"[lmdeploy] Config: max_batch_size={max_batch}, num_gpus={num_gpus}")
++            
++            # 增大 cache_max_entry_count 以提高 KV cache 性能
++            # 如果显存不足，可以降低到 0.5
++            cache_ratio = kwargs.get('lmdeploy_cache_ratio', 0.8)
+             self.model = pipeline(
+                 model_path,
+                 vision_config=vision_config,
+                 backend_config=engine_type(
+                     session_len=max(16384, kwargs.get("max_new_tokens", 16384)),
+-                    cache_max_entry_count=0.5,
++                    cache_max_entry_count=cache_ratio,
+                     tp=num_gpus,
+                 )
+             )
+@@ -367,22 +384,45 @@ class InternVLChat(BaseModel):
+ 
+         if image_num > 1:
+             image_path = [x['value'] for x in message if x['type'] == 'image']
+-            pixel_values_list = []
+-            for file_name in image_path:
+-                pixel_values_list.append(load_image(file_name, max_num=max_num).to(self.device).to(torch.bfloat16))
+-            pixel_values = torch.cat(pixel_values_list, dim=0)
+         elif image_num == 1:
+             image_path = [x['value'] for x in message if x['type'] == 'image'][0]
+-            pixel_values = load_image(image_path, max_num=max_num).to(self.device).to(torch.bfloat16)
+         else:
+-            pixel_values = None
+-        with torch.no_grad():
+-            response = self.model.chat(
+-                self.tokenizer,
+-                pixel_values=pixel_values,
+-                question=prompt,
+-                generation_config=self.kwargs,
+-                verbose=True)
++            image_path = None
++
++        if self.use_lmdeploy:
++            from lmdeploy import GenerationConfig
++            # 过滤掉 None 值，避免 GenerationConfig 报错
++            kwargs_default = {k: v for k, v in self.kwargs.items() if v is not None}
++            # 如果 top_p 不在 kwargs 中或为 None，设置默认值
++            if 'top_p' not in kwargs_default:
++                kwargs_default['top_p'] = 0.95
++            gen_config = GenerationConfig(**kwargs_default)
++            gen_config.random_seed = None
++            if image_path is None:
++                image_path = []
++            elif isinstance(image_path, str):
++                image_path = [image_path]
++            messages_list = prepare_messages_list(prompt, image_path, system_prompt=self.system_prompt)
++            assert len(messages_list) == 1
++            with torch.no_grad():
++                response = self.model(messages_list, gen_config=gen_config)[0]
++            response = response.text
++        else:
++            if image_num > 1:
++                pixel_values_list = []
++                for file_name in image_path:
++                    pixel_values_list.append(load_image(file_name, max_num=max_num).to(self.device).to(torch.bfloat16))
++                pixel_values = torch.cat(pixel_values_list, dim=0)
++            elif image_num == 1:
++                pixel_values = load_image(image_path, max_num=max_num).to(self.device).to(torch.bfloat16)
++            else:
++                pixel_values = None
++            with torch.no_grad():
++                response = self.model.chat(
++                    self.tokenizer,
++                    pixel_values=pixel_values,
++                    question=prompt,
++                    generation_config=self.kwargs)
+         return response
+ 
+     @torch.no_grad()

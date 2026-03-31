@@ -15,8 +15,13 @@ This repository includes:
 - [Introduction](#introduction)
 - [Key Features](#key-features)
 - [Dataset Statistics](#dataset-statistics)
-- [Installation](#installation)
-- [Usage](#usage)
+- [Quick Start](#quick-start)
+  - [Step 1: Environment Setup](#step-1-environment-setup)
+  - [Step 2: Setup VLMEvalKit](#step-2-setup-vlmevalkit)
+  - [Step 3: Download & Convert Data](#step-3-download--convert-data)
+  - [Step 4: Run Inference](#step-4-run-inference)
+  - [Step 5: Convert Results](#step-5-convert-results)
+  - [Step 6: Evaluation](#step-6-evaluation)
 - [CARBON Notation](#carbon-notation)
 - [Benchmark Results](#benchmark-results)
 - [Citation](#citation)
@@ -49,7 +54,9 @@ To address the limitations of SMILES and MolFile in expressing complex chemical 
 | **Ground Truth** | CARBON, Graph, SMILES | SMILES, MolFile |
 | **Complex Structure Support** | Non-standard bonds, icon groups, mixed valences | Standard structures only |
 
-## Installation
+## Quick Start
+
+### Step 1: Environment Setup
 
 ```bash
 git clone https://github.com/your-username/MolRecBench-Wild.git
@@ -60,10 +67,125 @@ conda create -n molrec python=3.10 -y
 pip install -r requirements.txt
 ```
 
-## Usage
+### Step 2: Setup VLMEvalKit
+
+We use [VLMEvalKit](https://github.com/open-compass/VLMEvalKit) as the inference backend, with minimal patches to add chemistry-specific model adapters and datasets. Our patches are provided in [`patches/`](./patches/) for full transparency — we do not redistribute VLMEvalKit itself.
+
+Run the one-click setup script:
+
 ```bash
-sh eval.sh
+bash setup_vlmevalkit.sh
 ```
+
+After setup, configure your API keys:
+
+```bash
+# VLMEvalKit/.env
+OPENAI_API_BASE=https://your-api-base-url
+OPENAI_API_KEY=your-api-key
+```
+
+### Step 3: Download & Convert Data
+
+Download the dataset from HuggingFace and convert it to VLMEvalKit TSV format in one step:
+
+```bash
+# Download dataset and convert to SMILES track TSV
+python download_and_convert.py --prompt smiles
+
+# Other tracks: graph_simple, graph, or all
+python download_and_convert.py --prompt all             # generate TSV for all three tracks
+
+python download_and_convert.py --prompt smiles --skip-download  # skip download if dataset/ already exists
+```
+
+The script downloads images to `./dataset/images/`, saves ground truth to `./dataset/annotation.jsonl`, and outputs TSV files to `~/LMUData/`.
+
+### Step 4: Run Inference
+
+```bash
+cd VLMEvalKit
+
+# Single-GPU / API model
+python run.py --data chem_smiles --model GPT4o_20241120 --mode infer
+
+# Multi-GPU (auto-detect)
+bash scripts/run.sh --data chem_smiles --model GPT4o_20241120 --mode infer
+
+# SLURM cluster
+bash scripts/srun.sh <partition> --data chem_graph_simple --model InternVL3.5-241B-A28B-API --mode infer
+```
+
+**Key arguments:**
+
+| Argument | Description |
+| :--- | :--- |
+| `--data` | Dataset name, matching the TSV filename under `~/LMUData/` (without `.tsv`) |
+| `--model` | Model name as defined in `vlmeval/config.py` |
+| `--mode` | `infer` (inference only), `eval` (evaluation only), or `all` (both) |
+| `--work-dir` | Output directory (default: `./outputs`) |
+| `--api-nproc` | Number of parallel API calls (default: 4) |
+| `--reuse` | Reuse existing prediction files to resume interrupted runs |
+
+Prediction results will be saved to `VLMEvalKit/outputs/<model_name>/`.
+
+### Step 5: Convert Results
+
+VLMEvalKit outputs an XLSX file per run. Convert it to the JSONL format expected by the Evaluator:
+
+```bash
+# Convert XLSX → Evaluator JSONL
+python convert_results.py VLMEvalKit/outputs/<model_name>/<result_file>.xlsx \
+    -o results/<model_name>.jsonl
+```
+
+### Step 6: Evaluation
+
+After inference, use the Evaluator to compute accuracy on three tracks. The Evaluator takes two JSONL files — ground truth and predictions — and performs molecular graph isomorphism comparison.
+
+**Evaluation metrics:**
+
+| Metric | What it compares | Description |
+| :--- | :--- | :--- |
+| **SMILES Accuracy** | Canonical SMILES strings | Converts both GT and prediction to SMILES with superatom handling, then compares canonical forms |
+| **Simplified Graph Accuracy** | Atom symbols + bond types | Graph isomorphism on simplified molecular graph (ignoring charges, radicals, valences, isotopes) |
+| **Graph Accuracy** | Full CARBON attributes + brackets | Graph isomorphism on the complete molecular graph including all attributes and bracket structures |
+
+**Running evaluation:**
+
+```bash
+python evaluate/Evaluator.py \
+    --gt_path dataset/annotation.jsonl \
+    --pred_path <path_to_pred.jsonl> \
+    --save_path results/eval_info.json
+```
+
+Output:
+
+```
+SMILES           Success: 5029, Correct: 1383 R: 0.2750
+Simplified Graph Success: 5029, Correct: 783  R: 0.1558
+Graph            Success: 5029, Correct: 629  R: 0.1250
+```
+
+The prediction JSONL file should contain one entry per sample in the following format:
+
+```json
+{
+    "img_name": "unique_id",
+    "symbols": ["C", "O", "N"],
+    "charges": [0, 0, -1],
+    "radicals": [0, 0, 0],
+    "valences": [0, 0, 0],
+    "isotopes": [0, 0, 0],
+    "attach_points": [0, 0, 0],
+    "coords": [[x1, y1], [x2, y2], [x3, y3]],
+    "bonds": [[0, 1, "single"], [1, 2, "double"]],
+    "brackets": []
+}
+```
+
+The `--save_path` option saves per-sample evaluation details to a JSON file for further analysis.
 
 ## CARBON Notation
 

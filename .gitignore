@@ -163,3 +163,6 @@ datasets
 datasets/
 tmp/
 tmp
+
+# VLMEvalKit (cloned by setup script, not tracked in this repo)
+VLMEvalKit/
