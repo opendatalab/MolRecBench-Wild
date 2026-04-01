@@ -16,7 +16,7 @@ This repository includes:
 - [Key Features](#key-features)
 - [Dataset Statistics](#dataset-statistics)
 - [Quick Start](#quick-start)
-  - [Step 1: Environment Setup](#step-1-environment-setup)
+  - [Step 1: Setup Environment](#step-1-setup-environment)
   - [Step 2: Setup VLMEvalKit](#step-2-setup-vlmevalkit)
   - [Step 3: Download & Convert Data](#step-3-download--convert-data)
   - [Step 4: Run Inference](#step-4-run-inference)
@@ -56,7 +56,7 @@ To address the limitations of SMILES and MolFile in expressing complex chemical 
 
 ## Quick Start
 
-### Step 1: Environment Setup
+### Step 1:  Setup Environment
 
 ```bash
 git clone https://github.com/your-username/MolRecBench-Wild.git
@@ -90,16 +90,19 @@ OPENAI_API_KEY=your-api-key
 Download the dataset from HuggingFace and convert it to VLMEvalKit TSV format in one step:
 
 ```bash
+# Defaulit: download all tracks data
+python download_and_convert.py --prompt all             # generate TSV for all three tracks
+
 # Download dataset and convert to SMILES track TSV
 python download_and_convert.py --prompt smiles
-
-# Other tracks: graph_simple, graph, or all
-python download_and_convert.py --prompt all             # generate TSV for all three tracks
 
 python download_and_convert.py --prompt smiles --skip-download  # skip download if dataset/ already exists
 ```
 
-The script downloads images to `./dataset/images/`, saves ground truth to `./dataset/annotation.jsonl`, and outputs TSV files to `~/LMUData/`.
+The script will:
+1. Download images to `./dataset/images/` and save ground truth to `./dataset/annotation.jsonl`
+2. Generate TSV files to `./LMUData/`
+3. Automatically register the `LMUData` path in `VLMEvalKit/.env` so VLMEvalKit can find the TSV files
 
 ### Step 4: Run Inference
 

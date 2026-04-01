@@ -13,6 +13,7 @@ import argparse
 import csv
 import json
 import os
+import re
 import sys
 from pathlib import Path
 
@@ -23,11 +24,14 @@ from PIL import Image
 from tqdm import tqdm
 
 DATASET_NAME = "opendatalab/U-MolRecBench-Wild"
-SAVE_PATH = "./dataset"
-IMAGE_PATH = "./dataset/images"
-LMUDATA_PATH = os.path.expanduser("~/LMUData")
 
-PROMPT_DIR = Path(__file__).parent / "inference" / "scripts" / "chem" / "prompt"
+SCRIPT_DIR = Path(__file__).parent.resolve()
+SAVE_PATH = SCRIPT_DIR / "dataset"
+IMAGE_PATH = SAVE_PATH / "images"
+LMUDATA_PATH = SCRIPT_DIR / "LMUData"
+VLMEVALKIT_ENV = SCRIPT_DIR / "VLMEvalKit" / ".env"
+
+PROMPT_DIR = SCRIPT_DIR / "inference" / "scripts" / "chem" / "prompt"
 PROMPT_MAP = {
     "smiles": ("smiles.txt", "chem_smiles"),
     "graph_simple": ("graph_simple.txt", "chem_graph_simple"),
@@ -52,8 +56,8 @@ def download_dataset():
     else:
         login()
 
-    os.makedirs(SAVE_PATH, exist_ok=True)
-    os.makedirs(IMAGE_PATH, exist_ok=True)
+    SAVE_PATH.mkdir(parents=True, exist_ok=True)
+    IMAGE_PATH.mkdir(parents=True, exist_ok=True)
 
     dataset = load_dataset(DATASET_NAME, split="test")
 
@@ -61,12 +65,12 @@ def download_dataset():
     for idx, row in tqdm(enumerate(dataset), desc="Downloading images", total=len(dataset)):
         image = row["image"]
         sample_id = row["id"]
-        image_path = os.path.join(IMAGE_PATH, sample_id)
-        image.save(image_path)
+        image_path = IMAGE_PATH / sample_id
+        image.save(str(image_path))
 
         carbon_info = {
             "id": sample_id,
-            "image_path": image_path,
+            "image_path": str(image_path),
             "hardcase_label": row["hardcase_label"],
             "symbols": row["symbols"],
             "charges": row["charges"],
@@ -80,13 +84,13 @@ def download_dataset():
         }
         annotation.append(carbon_info)
 
-    annotation_path = os.path.join(SAVE_PATH, "annotation.jsonl")
-    with jsonlines.open(annotation_path, "w") as writer:
+    annotation_path = SAVE_PATH / "annotation.jsonl"
+    with jsonlines.open(str(annotation_path), "w") as writer:
         for item in annotation:
             writer.write(item)
 
     print(f"Downloaded {len(annotation)} samples to {SAVE_PATH}/")
-    return annotation_path
+    return str(annotation_path)
 
 
 def convert_to_tsv(annotation_path, prompt_name, num_samples=None):
@@ -97,8 +101,8 @@ def convert_to_tsv(annotation_path, prompt_name, num_samples=None):
     with open(prompt_path, "r", encoding="utf-8") as f:
         question_text = f.read().strip()
 
-    os.makedirs(LMUDATA_PATH, exist_ok=True)
-    output_tsv = os.path.join(LMUDATA_PATH, f"{tsv_name}.tsv")
+    LMUDATA_PATH.mkdir(parents=True, exist_ok=True)
+    output_tsv = LMUDATA_PATH / f"{tsv_name}.tsv"
 
     rows = []
     with open(annotation_path, "r", encoding="utf-8") as f:
@@ -139,6 +143,24 @@ def convert_to_tsv(annotation_path, prompt_name, num_samples=None):
     print(f"[{prompt_name}] Converted {len(rows)} samples -> {output_tsv}")
 
 
+def update_vlmevalkit_env():
+    """Write LMUData path to VLMEvalKit/.env so VLMEvalKit can find the TSV files."""
+    lmudata_abs = str(LMUDATA_PATH)
+    env_line = f"LMUData={lmudata_abs}"
+
+    if VLMEVALKIT_ENV.exists():
+        content = VLMEVALKIT_ENV.read_text(encoding="utf-8")
+        if re.search(r'^LMUData=', content, re.MULTILINE):
+            content = re.sub(r'^LMUData=.*$', env_line, content, flags=re.MULTILINE)
+        else:
+            content = content.rstrip("\n") + "\n" + env_line + "\n"
+        VLMEVALKIT_ENV.write_text(content, encoding="utf-8")
+    else:
+        VLMEVALKIT_ENV.write_text(env_line + "\n", encoding="utf-8")
+
+    print(f"Registered LMUData={lmudata_abs} in {VLMEVALKIT_ENV}")
+
+
 def main():
     parser = argparse.ArgumentParser(
         description="Download U-MolRecBench-Wild and convert to VLMEvalKit TSV format."
@@ -162,7 +184,7 @@ def main():
     )
     args = parser.parse_args()
 
-    annotation_path = os.path.join(SAVE_PATH, "annotation.jsonl")
+    annotation_path = str(SAVE_PATH / "annotation.jsonl")
     if args.skip_download and os.path.exists(annotation_path):
         print(f"Skipping download, using existing {annotation_path}")
     else:
@@ -171,6 +193,8 @@ def main():
     prompts = list(PROMPT_MAP.keys()) if args.prompt == "all" else [args.prompt]
     for p in prompts:
         convert_to_tsv(annotation_path, p, args.num_samples)
+
+    update_vlmevalkit_env()
 
 
 if __name__ == "__main__":
