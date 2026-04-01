@@ -965,21 +965,18 @@ index 22077b6..959846d 100644
  
  for grp in model_groups:
 diff --git a/vlmeval/dataset/__init__.py b/vlmeval/dataset/__init__.py
-index d52fe0d..d1e0c68 100644
+index d52fe0d..7f5b260 100644
 --- a/vlmeval/dataset/__init__.py
 +++ b/vlmeval/dataset/__init__.py
-@@ -20,6 +20,10 @@ from .image_vqa import (
+@@ -20,6 +20,7 @@ from .image_vqa import (
  from .image_ccocr import CCOCRDataset
  from .image_shortqa import ImageShortQADataset, PathVQA_VAL, PathVQA_TEST
  from .text_mcq import CustomTextMCQDataset, TextMCQDataset
-+from .chem_formula import (
-+    ChemFormulaRecognition, ChemFormulaRecognitionOrganic,
-+    ChemFormulaRecognitionInorganic, ChemFormulaRecognitionStructural
-+)
++from .chem_formula import ChemFormulaRecognition
  
  from .vcr import VCRDataset
  from .mmlongbench import MMLongBench
-@@ -212,7 +216,8 @@ IMAGE_DATASET = [
+@@ -212,7 +213,8 @@ IMAGE_DATASET = [
      MMEReasoning, GOBenchDataset, SFE, ChartMimic, MMVMBench, XLRSBench,
      OmniEarthMCQBench, VisFactor, OSTDataset, OCRBench_v2, TreeBench, CVQA, M4Bench,
      AyaVisionBench, TopViewRS, VLMBias, MMHELIX, MedqbenchMCQDataset,
@@ -991,13 +988,12 @@ index d52fe0d..d1e0c68 100644
  VIDEO_DATASET = [
 diff --git a/vlmeval/dataset/chem_formula.py b/vlmeval/dataset/chem_formula.py
 new file mode 100644
-index 0000000..b9381dd
+index 0000000..24e0a84
 --- /dev/null
 +++ b/vlmeval/dataset/chem_formula.py
-@@ -0,0 +1,344 @@
+@@ -0,0 +1,73 @@
 +"""
-+Chemical Formula Recognition Benchmark
-+用于评测视觉语言模型对化学分子式图像的识别能力
++Chemical Formula Recognition Dataset for U-MolRecBench-Wild.
 +"""
 +
 +import pandas as pd
@@ -1007,175 +1003,31 @@ index 0000000..b9381dd
 +from ..smp.file import get_intermediate_file_path
 +
 +
-+def normalize_formula(formula):
-+    """
-+    标准化化学分子式，移除空格和不必要的字符
-+    
-+    Args:
-+        formula: 化学分子式字符串
-+        
-+    Returns:
-+        标准化后的化学分子式
-+    """
-+    if pd.isna(formula) or formula == '':
-+        return ''
-+    
-+    # 移除空格
-+    formula = str(formula).strip()
-+    # 移除多余空格
-+    formula = ' '.join(formula.split())
-+    
-+    return formula
-+
-+
-+def exact_match_score(prediction, answer):
-+    """
-+    精确匹配评分
-+    
-+    Args:
-+        prediction: 模型预测的化学分子式
-+        answer: 正确答案
-+        
-+    Returns:
-+        1 表示完全匹配，0 表示不匹配
-+    """
-+    pred_norm = normalize_formula(prediction)
-+    ans_norm = normalize_formula(answer)
-+    
-+    return 1 if pred_norm == ans_norm else 0
-+
-+
-+def case_insensitive_match_score(prediction, answer):
-+    """
-+    不区分大小写的匹配评分
-+    
-+    Args:
-+        prediction: 模型预测的化学分子式
-+        answer: 正确答案
-+        
-+    Returns:
-+        1 表示匹配（忽略大小写），0 表示不匹配
-+    """
-+    pred_norm = normalize_formula(prediction).lower()
-+    ans_norm = normalize_formula(answer).lower()
-+    
-+    return 1 if pred_norm == ans_norm else 0
-+
-+
-+def calculate_formula_similarity(prediction, answer):
-+    """
-+    计算化学分子式的相似度
-+    基于字符级别的编辑距离
-+    
-+    Args:
-+        prediction: 模型预测的化学分子式
-+        answer: 正确答案
-+        
-+    Returns:
-+        相似度分数 (0-1)
-+    """
-+    pred_norm = normalize_formula(prediction)
-+    ans_norm = normalize_formula(answer)
-+    
-+    if not ans_norm:
-+        return 0.0
-+    
-+    if pred_norm == ans_norm:
-+        return 1.0
-+    
-+    # 计算编辑距离
-+    m, n = len(pred_norm), len(ans_norm)
-+    dp = [[0] * (n + 1) for _ in range(m + 1)]
-+    
-+    for i in range(m + 1):
-+        dp[i][0] = i
-+    for j in range(n + 1):
-+        dp[0][j] = j
-+    
-+    for i in range(1, m + 1):
-+        for j in range(1, n + 1):
-+            if pred_norm[i-1] == ans_norm[j-1]:
-+                dp[i][j] = dp[i-1][j-1]
-+            else:
-+                dp[i][j] = min(dp[i-1][j], dp[i][j-1], dp[i-1][j-1]) + 1
-+    
-+    edit_distance = dp[m][n]
-+    max_len = max(m, n)
-+    
-+    return 1 - (edit_distance / max_len) if max_len > 0 else 0.0
-+
-+
 +class ChemFormulaRecognition(ImageBaseDataset):
-+    """
-+    化学分子式识别 Benchmark
-+    
-+    数据集评测化学分子式图像识别能力，包括：
-+    - 有机化合物分子式识别
-+    - 无机化合物分子式识别  
-+    - 复杂结构式识别
-+    
-+    TSV 文件格式要求：
-+    - index: 唯一标识符
-+    - image: 图片的 base64 编码（或引用其他 index）
-+    - image_path: 图片路径（可选）
-+    - question: 提问内容（如："请识别图片中的化学分子式"）
-+    - answer: 正确的化学分子式
-+    - category: 分子式类型（可选，如：organic, inorganic, structural）
-+    - difficulty: 难度等级（可选，如：easy, medium, hard）
-+    """
-+    
++
 +    TYPE = 'ChemFormula'
-+    
++
 +    DATASET_URL = {
-+        # 将您的 TSV 数据集文件上传到可访问的 URL，或者放在本地
-+        # 示例：'ChemFormula_TEST': 'https://your-server.com/ChemFormula_TEST.tsv'
-+        # 本地文件：确保设置环境变量 export LMUData=/mnt/petrelfs/lilinye/LMUData
-+        # export LMUData=/mnt/petrelfs/aohuijie/LMUData
-+        # 然后文件命名为 chem.tsv，系统会自动在 $LMUData 目录下查找
-+        'chem': '',  # 留空表示使用本地文件 chem.tsv
-+        'chem_graph_simple': '',  # 留空表示使用本地文件 chem_graph_simple.tsv
-+        'chem_smiles': '',  # 留空表示使用本地文件 chem_smiles.tsv
-+        'chem_smiles_with_url': '',  # 留空表示使用本地文件 chem_smiles_with_url.tsv
-+        'abbr_graph_0107': '',  # USPTO 数据集（Graph 格式）
-+        'abbr_smiles_0107': '',  # USPTO 数据集（SMILES 格式）
-+        'chem_uspto': '',  # USPTO 数据集
++        'chem': '',
++        'chem_graph_simple': '',
++        'chem_smiles': '',
 +    }
-+    
++
 +    DATASET_MD5 = {
-+        'chem': None,  # 可以设置为 MD5 值以验证文件完整性
++        'chem': None,
 +        'chem_graph_simple': None,
-+        'chem_smiles': None,    
-+        'chem_smiles_with_url': None,
-+        'abbr_graph': None,
-+        'abbr_smiles': None,
-+        'abbr_graph_test10': None,
-+        'abbr_smiles_test10': None,
-+        'chem_uspto': None,
++        'chem_smiles': None,
 +    }
-+    
++
 +    def build_prompt(self, line):
-+        """
-+        构建化学分子式识别的 prompt
-+        
-+        Args:
-+            line: 数据记录（int 索引或 pd.Series）
-+            
-+        Returns:
-+            多模态消息列表
-+        """
 +        if isinstance(line, int):
 +            line = self.data.iloc[line]
-+        
-+        # 构建多模态消息
++
 +        msgs = []
-+        
-+        # 如果存在 visual_example 字段，先添加 visual example 图像
-+        # 支持多个 visual_example，如 visual_example_1, visual_example_2 等
-+        # 首先检查是否有带数字后缀的 visual_example
++
 +        visual_example_idx = 1
 +        has_numbered_examples = False
-+        
-+        # 按顺序查找 visual_example_1, visual_example_2, ...
++
 +        while True:
 +            field_name = f'visual_example_{visual_example_idx}'
 +            if field_name in line and pd.notna(line[field_name]) and line[field_name]:
@@ -1185,160 +1037,34 @@ index 0000000..b9381dd
 +                visual_example_idx += 1
 +            else:
 +                break
-+        
-+        # 如果没有带数字后缀的，检查是否有单独的 visual_example 字段
++
 +        if not has_numbered_examples and 'visual_example' in line and pd.notna(line['visual_example']) and line['visual_example']:
-+            # visual_example 直接使用图片路径
 +            visual_example_path = line['visual_example']
 +            msgs.append(dict(type='image', value=visual_example_path))
-+        
-+        # 获取图片路径或URL
-+        # 优先使用 image_url（如果存在且 use_image_url 为 True）
++
 +        if self.use_image_url and 'image_url' in line and pd.notna(line['image_url']) and line['image_url']:
-+            # 使用 URL 而不是本地路径
 +            tgt_path = toliststr(line['image_url'])
 +        elif self.meta_only:
 +            tgt_path = toliststr(line['image_path'])
 +        else:
 +            tgt_path = self.dump_image(line)
-+        
-+        # 添加主要图像
++
 +        if isinstance(tgt_path, list):
 +            msgs.extend([dict(type='image', value=p) for p in tgt_path])
 +        else:
 +            msgs.append(dict(type='image', value=tgt_path))
-+        
-+        # 获取问题文本
++
 +        if 'question' in line and not pd.isna(line['question']) and line['question'] != '':
 +            question = line['question']
 +        else:
-+            # 默认问题
 +            raise ValueError("question is required")
-+        
-+        # 添加问题文本
++
 +        msgs.append(dict(type='text', value=question))
-+        
++
 +        return msgs
-+    
++
 +    def evaluate(self, eval_file, **judge_kwargs):
-+        """
-+        评估化学分子式识别结果
-+        
-+        Args:
-+            eval_file: 包含预测结果的 .xlsx 文件路径
-+            **judge_kwargs: 评测相关参数
-+            
-+        Returns:
-+            1 (简化版本)
-+        """
-+        # 简化版本：直接返回 1
-+        # TODO: 完整的评估逻辑已注释，需要时可以取消注释启用
-+        
-+        # # 加载预测结果
-+        # data = load(eval_file)
-+        # 
-+        # assert 'answer' in data and 'prediction' in data, \
-+        #     "评测文件必须包含 'answer' 和 'prediction' 字段"
-+        # 
-+        # # 确保数据类型为字符串
-+        # data['prediction'] = [str(x) if not pd.isna(x) else '' for x in data['prediction']]
-+        # data['answer'] = [str(x) if not pd.isna(x) else '' for x in data['answer']]
-+        # 
-+        # # 计算各项指标
-+        # data['exact_match'] = [
-+        #     exact_match_score(pred, ans) 
-+        #     for pred, ans in zip(data['prediction'], data['answer'])
-+        # ]
-+        # 
-+        # data['case_insensitive_match'] = [
-+        #     case_insensitive_match_score(pred, ans)
-+        #     for pred, ans in zip(data['prediction'], data['answer'])
-+        # ]
-+        # 
-+        # data['similarity'] = [
-+        #     calculate_formula_similarity(pred, ans)
-+        #     for pred, ans in zip(data['prediction'], data['answer'])
-+        # ]
-+        # 
-+        # # 保存详细结果
-+        # storage = get_intermediate_file_path(eval_file, '_detailed')
-+        # dump(data, storage)
-+        # 
-+        # # 计算总体指标
-+        # results = {
-+        #     'Exact Match Accuracy': [data['exact_match'].mean() * 100],
-+        #     'Case-Insensitive Accuracy': [data['case_insensitive_match'].mean() * 100],
-+        #     'Average Similarity': [data['similarity'].mean() * 100],
-+        #     'Total Samples': [len(data)],
-+        # }
-+        # 
-+        # # 如果有类别信息，计算分类别的准确率
-+        # if 'category' in data:
-+        #     categories = data['category'].unique()
-+        #     for cat in categories:
-+        #         if pd.isna(cat):
-+        #             continue
-+        #         cat_data = data[data['category'] == cat]
-+        #         results[f'{cat}_Exact_Match'] = [cat_data['exact_match'].mean() * 100]
-+        #         results[f'{cat}_Samples'] = [len(cat_data)]
-+        # 
-+        # # 如果有难度信息，计算分难度的准确率
-+        # if 'difficulty' in data:
-+        #     difficulties = data['difficulty'].unique()
-+        #     for diff in difficulties:
-+        #         if pd.isna(diff):
-+        #             continue
-+        #         diff_data = data[data['difficulty'] == diff]
-+        #         results[f'{diff}_Exact_Match'] = [diff_data['exact_match'].mean() * 100]
-+        #         results[f'{diff}_Samples'] = [len(diff_data)]
-+        # 
-+        # # 转换为 DataFrame
-+        # results_df = pd.DataFrame(results)
-+        # 
-+        # # 保存评测结果
-+        # score_file = get_intermediate_file_path(eval_file, '_score', 'csv')
-+        # dump(results_df, score_file)
-+        # 
-+        # return results_df
-+        
 +        return 1
-+
-+
-+class ChemFormulaRecognitionOrganic(ChemFormulaRecognition):
-+    """有机化合物分子式识别 Benchmark"""
-+    
-+    DATASET_URL = {
-+        'ChemFormula_Organic': '',
-+    }
-+    
-+    DATASET_MD5 = {
-+        'ChemFormula_Organic': None,
-+    }
-+
-+
-+class ChemFormulaRecognitionInorganic(ChemFormulaRecognition):
-+    """无机化合物分子式识别 Benchmark"""
-+    
-+    DATASET_URL = {
-+        'ChemFormula_Inorganic': '',
-+    }
-+    
-+    DATASET_MD5 = {
-+        'ChemFormula_Inorganic': None,
-+    }
-+
-+
-+class ChemFormulaRecognitionStructural(ChemFormulaRecognition):
-+    """结构式识别 Benchmark"""
-+    
-+    DATASET_URL = {
-+        'ChemFormula_Structural': '',
-+    }
-+    
-+    DATASET_MD5 = {
-+        'ChemFormula_Structural': None,
-+    }
-+
 diff --git a/vlmeval/dataset/image_base.py b/vlmeval/dataset/image_base.py
 index 77b46a2..3499d7a 100644
 --- a/vlmeval/dataset/image_base.py
