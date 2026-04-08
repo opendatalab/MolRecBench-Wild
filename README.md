@@ -1,19 +1,36 @@
-# U-MolRecBench-Wild: A Real-World Benchmark for Optical Chemical Structure Recognition
+<p align="center">
+  <img src="assets/banner.png" width="45%" alt="Open Data Lab" />
+</p>
 
-[![Dataset](https://img.shields.io/badge/Dataset-HuggingFace-orange?logo=huggingface)](https://huggingface.co/datasets/opendatalab/U-MolRecBench-Wild)
-<!-- [![Paper](https://img.shields.io/badge/Paper-CVPR%202026-red.svg)](https://arxiv.org/abs/xxxx.xxxxx)  -->
-**U-MolRecBench-Wild** is a benchmark suite for Optical Chemical Structure Recognition (OCSR) derived from real-world chemical literature. Unlike existing benchmarks primarily based on patents or synthetic images, this dataset captures the visual noise and complex chemical semantic challenges found in authentic academic scenarios.
+<h1 align="center">U-MolRecBench-Wild</h1>
 
-This repository includes:
+<p align="center">
+  <b>A Real-World Benchmark for Optical Chemical Structure Recognition</b>
+</p>
+
+<p align="center">
+  <a href="https://arxiv.org/abs/2511.02384"><img src="https://img.shields.io/badge/arXiv-2511.02384-b31b1b.svg" alt="arXiv"></a>
+  <a href="https://huggingface.co/datasets/opendatalab/U-MolRecBench-Wild"><img src="https://img.shields.io/badge/🤗%20Dataset-U--MolRecBench--Wild-blue" alt="Dataset"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/License-Apache%202.0-green.svg" alt="License"></a>
+</p>
+
+
+<p align="center">
+  <img src="assets/why_molrecbench_wild.png" width="50%" alt="Why Molrecbench Wild" />
+</p>
+
+## 🔥 News
+
+- 🚀 [04/07/2026] Our paper is accepted by **CVPRF 2026**!
+
+## ✨ Highlights
 - 📊 **U-MolRecBench-Wild Dataset**: 5029 molecular structure graphs from 820 recent chemical papers.
-- 🧩 **MOSAIC Framework**: The first dual-dimension (Visual Presentation + Chemical Semantics) difficulty assessment system with 42 fine-grained labels.
+- 🧩 **MOSAIC Framework**: The first dual-dimension (Visual Presentation + Chemical Semantics) difficulty assessment system with 37 fine-grained labels.
 - 🧪 **CARBON Notation**: A novel molecular representation language capable of expressing valence changes, icon-based groups, and other non-standard chemical semantics.
 - 📏 **Evaluation Toolkit**: A dual-track evaluation protocol supporting both CARBON and SMILES outputs.
 
 ## 📖 Table of Contents
 
-- [Introduction](#introduction)
-- [Key Features](#key-features)
 - [Dataset Statistics](#dataset-statistics)
 - [Quick Start](#quick-start)
   - [Step 1: Setup Environment](#step-1-setup-environment)
@@ -24,24 +41,6 @@ This repository includes:
   - [Step 6: Evaluation](#step-6-evaluation)
 - [CARBON Notation](#carbon-notation)
 - [Benchmark Results](#benchmark-results)
-- [Citation](#citation)
-- [License](#license)
-
-## Introduction
-
-Optical Chemical Structure Recognition (OCSR) aims to convert molecular diagrams in scientific literature into machine-readable formats. However, due to significant visual complexity and chemical diversity in real images, existing systems perform poorly in authentic scenarios.
-
-We introduce **MOSAIC** (Molecular Optical-Semantic Assessment of Image Complexity), a dual-dimension difficulty framework to quantify visual noise and chemical semantic challenges. Based on this, we constructed **MolRecBench-Wild**, a benchmark set of 5029 structures covering the full spectrum of difficulties observed in real publications.
-
-To address the limitations of SMILES and MolFile in expressing complex chemical information, we propose **CARBON** (Complex Atomic Representation and Bonding Object Notation), a representation language capable of precisely expressing non-standard bonds, mixed valences, and icon-based groups.
-
-## Key Features
-
-*   **Real-World Source**: Data sourced entirely from 820 recent high-impact chemical journal articles (CC-BY-4.0 licensed), not patents or synthetic data.
-*   **High Complexity**: 93.29% of samples have at least one MOSAIC difficulty label, and 42% are challenging in both visual and chemical dimensions.
-*   **Rich Annotations**: Each sample is double-verified by domain experts and annotated with detailed MOSAIC difficulty labels.
-*   **Multi-Format Support**: Ground Truth is provided in three formats: CARBON, Simplified Graph, and SMILES (where applicable).
-*   **Dual-Track Evaluation**: Supports evaluation for models generating SMILES strings and models generating molecular graphs.
 
 ## Dataset Statistics
 
@@ -77,7 +76,7 @@ Run the one-click setup script:
 bash setup_vlmevalkit.sh
 ```
 
-After setup, configure your API keys:
+After setup, create a file named ".env" in the VLMEvalKit directory and configure your API keys:
 
 ```bash
 # VLMEvalKit/.env
@@ -109,28 +108,34 @@ The script will:
 ```bash
 cd VLMEvalKit
 
-# Single-GPU / API model
-python run.py --data chem_smiles --model GPT4o_20241120 --mode infer
+# Run a single task (SMILES)
+python run.py --data smiles --model GPT4o_20241120
 
-# Multi-GPU (auto-detect)
-bash scripts/run.sh --data chem_smiles --model GPT4o_20241120 --mode infer
+# Run all three tasks at once (SMILES, Simplified Graph, Full Graph)
+python run.py --data smiles simple_graph carbon --model GPT4o_20241120
 
-# SLURM cluster
-bash scripts/srun.sh <partition> --data chem_graph_simple --model InternVL3.5-241B-A28B-API --mode infer
+# Increase parallel API calls for faster inference
+python run.py --data smiles --model GPT4o_20241120 --api-nproc 32
+
+# Resume an interrupted run (skip already completed samples)
+python run.py --data smiles --model GPT4o_20241120 --reuse
 ```
 
 **Key arguments:**
 
 | Argument | Description |
 | :--- | :--- |
-| `--data` | Dataset name, matching the TSV filename under `~/LMUData/` (without `.tsv`) |
+| `--data` | Recognition task to run: SMILES, Simplified Graph, or Full Graph (CARBON) |
 | `--model` | Model name as defined in `vlmeval/config.py` |
-| `--mode` | `infer` (inference only), `eval` (evaluation only), or `all` (both) |
 | `--work-dir` | Output directory (default: `./outputs`) |
-| `--api-nproc` | Number of parallel API calls (default: 4) |
+| `--api-nproc` | Number of parallel API calls (default: 4, increase for faster inference) |
 | `--reuse` | Reuse existing prediction files to resume interrupted runs |
 
 Prediction results will be saved to `VLMEvalKit/outputs/<model_name>/`.
+
+**Testing with your own model:**
+
+To evaluate a custom model, you need to implement a model wrapper in VLMEvalKit. At minimum, create a class with a `generate_inner(msgs, dataset=None)` method that takes a multi-modal message list and returns the model's prediction string. Then register it in `vlmeval/config.py`. For details, see the [VLMEvalKit Development Guide](https://github.com/open-compass/VLMEvalKit/blob/main/docs/en/Development.md#implement-a-new-model).
 
 ### Step 5: Convert Results
 
@@ -157,35 +162,19 @@ After inference, use the Evaluator to compute accuracy on three tracks. The Eval
 **Running evaluation:**
 
 ```bash
-python evaluate/Evaluator.py \
-    --gt_path dataset/annotation.jsonl \
-    --pred_path <path_to_pred.jsonl> \
-    --save_path results/eval_info.json
-```
+python evaluate/eval_SMILES.py --gt_path dataset/annotation.jsonl --pred_path results_origin_jsonl/GPT4o_20241120/GPT4o_20241120_chem_smiles.jsonl
+# Output:
+# SMILES Precision: 0.0797
 
-Output:
+python evaluate/eval_S_GRAPH.py --gt_path dataset/annotation.jsonl --pred_path results_origin_jsonl/GPT4o_20241120/GPT4o_20241120_chem_graph_simple.jsonl
+# Output:
+# Simplified Graph Precision: 0.0374
 
-```
-SMILES           Success: 5029, Correct: 1383 R: 0.2750
-Simplified Graph Success: 5029, Correct: 783  R: 0.1558
-Graph            Success: 5029, Correct: 629  R: 0.1250
-```
-
-The prediction JSONL file should contain one entry per sample in the following format:
-
-```json
-{
-    "img_name": "unique_id",
-    "symbols": ["C", "O", "N"],
-    "charges": [0, 0, -1],
-    "radicals": [0, 0, 0],
-    "valences": [0, 0, 0],
-    "isotopes": [0, 0, 0],
-    "attach_points": [0, 0, 0],
-    "coords": [[x1, y1], [x2, y2], [x3, y3]],
-    "bonds": [[0, 1, "single"], [1, 2, "double"]],
-    "brackets": []
-}
+python evaluate/eval_GRAPH.py --gt_path dataset/annotation.jsonl --pred_path results_origin_jsonl/GPT4o_20241120/GPT4o_20241120_chem.jsonl
+# Output:
+# SMILES Precision          : 0.0
+# Simplified Graph Precision: 0.0344
+# Graph Precision           : 0.0298
 ```
 
 The `--save_path` option saves per-sample evaluation details to a JSON file for further analysis.
