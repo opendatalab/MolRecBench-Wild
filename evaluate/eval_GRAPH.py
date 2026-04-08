@@ -22,9 +22,17 @@ if __name__ == "__main__":
         pred_list = list(reader)
 
     evaluator = Evaluator(gt_list=gt_list, pred_list=pred_list, debug=True)
-    success, correct = evaluator.evaluate_smiles()
-    print(f"SMILES Precision: {round(correct / success, 4)}")
-    success, correct = evaluator.evaluate_simplified_graph()
-    print(f"Simplified Graph Precision: {round(correct / success, 4)}")
-    success, correct = evaluator.evaluate_graph()
-    print(f"Graph Precision: {round(correct / success, 4)}")
+    success_smiles, correct_smiles = evaluator.evaluate_smiles()
+    success_simplified_graph, correct_simplified_graph = (
+        evaluator.evaluate_simplified_graph()
+    )
+    success_graph, correct_graph = evaluator.evaluate_graph()
+    print(
+        f"SMILES Precision          : {round(correct_smiles / success_smiles, 4)}"
+    )
+    print(
+        f"Simplified Graph Precision: {round(correct_simplified_graph / success_simplified_graph, 4)}"
+    )
+    print(
+        f"Graph Precision           : {round(correct_graph / success_graph, 4)}"
+    )

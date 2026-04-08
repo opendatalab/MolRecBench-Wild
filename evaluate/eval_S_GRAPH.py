@@ -17,8 +17,10 @@ if __name__ == "__main__":
     # 加载参考的评估结果
     with jsonlines.open(args.gt_path) as reader:
         gt_list = list(reader)
+    pred_list = []
     with jsonlines.open(args.pred_path) as reader:
-        pred_list = list(reader)
+        for item in reader:
+            pred_list.append(item)
 
     evaluator = Evaluator(gt_list=gt_list, pred_list=pred_list, debug=True)
     success, correct = evaluator.evaluate_simplified_graph()
