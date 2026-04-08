@@ -168,7 +168,7 @@ def replace_superatoms_with_ts(smiles, tmp_atom="Tc", tmp_isotope_start_idx=20):
     return smiles, superatom_map
 
 
-def replace_superatom_with_mol(smiles_main: str, canonical=True):
+def replace_superatom_with_mol(smiles_main: str, canonical=True, debug=False):
     """
     Replace the superatoms with mol blocks in a SMILES string.
     Args:
@@ -186,10 +186,11 @@ def replace_superatom_with_mol(smiles_main: str, canonical=True):
     # 2. Read the main molecule
     mol_main = Chem.MolFromSmiles(smiles_main_with_placeholder, sanitize=False)
     if mol_main is None:
-        raise ValueError(
-            f"Failed to parse the main molecule SMILES: \n smiles_main : {smiles_main} \n smiles_main_with_placeholder : {smiles_main_with_placeholder}"
-        )
-        return smiles_main_with_placeholder, []
+        if debug:
+            print(
+                f"Failed to parse the main molecule SMILES: \n smiles_main : {smiles_main} \n smiles_main_with_placeholder : {smiles_main_with_placeholder}"
+            )
+        return ""
     rw_main_mol = Chem.RWMol(mol_main)
 
     # 3. Iterate over the superatom mapping, and replace each superatom with a mol block
@@ -259,7 +260,9 @@ def replace_superatom_with_mol(smiles_main: str, canonical=True):
         if superatom in smiles_exp:
             missing_abbrs.append(isotope_atom)
             smiles_exp = smiles_exp.replace(superatom, isotope_atom)
-    return smiles_exp, missing_abbrs
+    if debug:
+        print(f"INFO DEBUG: missing_abbrs: {missing_abbrs}")
+    return smiles_exp
 
 
 def _compare_bracket(bracket_gt, bracket_pred, mapping):
@@ -297,6 +300,11 @@ def compare_brackets(brackets_gt, brackets_pred, mapping):
     Returns:
         True if the two lists of brackets are the same, False otherwise
     """
+    # if len(brackets_gt) > 0:
+    #     print("*" * 100)
+    #     print(f"mapping: {mapping}")
+    #     print(f"brackets_gt: {brackets_gt}")
+    #     print(f"brackets_pred: {brackets_pred}")
     if len(brackets_gt) == 0 and len(brackets_pred) == 0:
         return True
     # If only the prediction has brackets, then the prediction is incorrect
@@ -453,7 +461,9 @@ def canonicalize_smiles_w_superatom(
                 print(f"INFO DEBUG: recover super atom: {value} -> {key}")
     if ignore_cistrans:  # Remove cis/trans isomers
         smiles = smiles.replace("/", "").replace("\\", "")
-    return smiles, super_atom_map, succeed
+    if debug:
+        print(f"INFO DEBUG: canonicalize result: {succeed}")
+    return smiles
 
 
 def convert_graph_to_mol_block(

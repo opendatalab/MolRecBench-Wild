@@ -25,22 +25,21 @@ from evaluate.utils import (
 indigo = Indigo()
 from networkx.algorithms import isomorphism
 
-PRINT_ERROR = False
 lg = RDLogger.logger()
-# Only show severe errors, suppress warnings and information
 lg.setLevel(RDLogger.CRITICAL)
 
 
 class Evaluator:
-    def __init__(self, gt_list, pred_list):
+    def __init__(self, gt_list, pred_list, debug=False):
         self.eval_info = {}
         self.mol_graph_gts = {}
         self.mol_graph_preds = {}
         self.attribute = {"smiles": {}, "simplified_graph": {}, "graph": {}}
+        self.debug = debug
 
         # 处理 GT
         for i in tqdm(range(len(gt_list)), desc="Loading GT"):
-            img_id_gt = gt_list[i]["img_name"]
+            img_id_gt = gt_list[i]["id"]
             self.eval_info[img_id_gt] = {}
             try:
                 mol_graph_gt = MolGraph(
@@ -58,13 +57,13 @@ class Evaluator:
                     },
                 )
             except Exception as e:
-                if PRINT_ERROR:
+                if self.debug:
                     print(f"ERROR LOAD GT: {e}")
                 mol_graph_gt = MolGraph(id=img_id_gt)
             self.mol_graph_gts[img_id_gt] = mol_graph_gt
         # 处理 Pred
         for i in range(len(pred_list)):
-            img_id_pred = pred_list[i]["img_name"]
+            img_id_pred = pred_list[i]["id"]
             try:
                 mol_graph_pred = MolGraph(
                     id=img_id_pred,
@@ -81,8 +80,10 @@ class Evaluator:
                     },
                 )
             except Exception as e:
-                if PRINT_ERROR:
+                if self.debug:
+                    print("*" * 100)
                     print(f"ERROR LOAD PRED: {e}")
+                    print(f"pred_list[i]: {pred_list[i]}")
                 mol_graph_pred = MolGraph(id=img_id_pred)
             self.mol_graph_preds[img_id_pred] = mol_graph_pred
 
@@ -304,7 +305,7 @@ class Evaluator:
                 return True, DiGM.mapping
         return False, None
 
-    def evaluate_smiles(self, expand=False):
+    def evaluate_smiles(self, expand=False, debug=False):
         correct_count = 0
         success_count = 0
         for id in tqdm(self.eval_info.keys(), desc="Evaluating SMILES"):
@@ -320,7 +321,7 @@ class Evaluator:
                 self.eval_info[id]["smiles_gt"] = smiles_gt
                 success_count += 1
             except Exception as e:
-                if PRINT_ERROR:
+                if debug:
                     print(f"ERROR SMILES GT: {e}")
                 continue
             try:
@@ -331,7 +332,7 @@ class Evaluator:
                 )
                 self.eval_info[id]["smiles_pred"] = smiles_pred
             except Exception as e:
-                if PRINT_ERROR:
+                if debug:
                     print(f"ERROR SMILES Pred: {e}")
                 continue
             if expand:

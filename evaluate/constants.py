@@ -1,3 +1,42 @@
+BOND_TYPES = {
+    "UNSPECIFIED_BOND_ID": 0,
+    "single": 1,
+    "double": 2,
+    "triple": 3,
+    "aromatic": 4,
+    "solid wedge": 5,
+    "solid_wedge": 5,
+    "dashed wedge": 6,
+    "dashed_wedge": 6,
+    "any": 7,
+    "single or double": 8,
+    "single_or_double": 8,
+    "single or aromatic": 9,
+    "single_or_aromatic": 9,
+    "double or aromatic": 10,
+    "double_or_aromatic": 10,
+    "dative": 11,  # 配位键
+    "hydrogen": 12,  # 氢键
+    "hydrogen bond": 12,  # 氢键
+    "wavy": 13,  # 单上/下键
+    "CROSSED_DOUBLE_BOND_ID": 14,  # 交叉双键
+    "bold": 15,  # 粗键
+    "dashed bold": 16,  # 虚粗键
+    "dashed_bold": 16,  # 虚粗键
+    "hollow wedge": 17,  # 空心键
+    "hollow_wedge": 17,  # 空心键
+    "bold double": 18,  # 单粗双键
+    "bold_double": 18,
+    "dashed double": 19,  # 虚双键
+    "dashed_double": 19,  # 虚双键
+    "dashed triple": 20,  # 虚三键
+    "dashed_triple": 20,  # 虚三键
+    "dashed dative": 21,  # 虚配位键
+    "dashed_dative": 21,  # 虚配位键
+    "triple with single dash": 22,  # 单虚双实键
+    "triple_with_single_dash": 22,  # 单虚双实键
+    "TRIPLE_WITH_DOUBLE_DASHED_BOND_ID": 23,  # 双虚单实键
+}
 GREEK_LETTERS = [
     "α",
     "β",
