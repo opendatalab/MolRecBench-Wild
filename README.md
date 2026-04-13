@@ -108,28 +108,34 @@ The script will:
 ```bash
 cd VLMEvalKit
 
-# Single-GPU / API model
-python run.py --data chem_smiles --model GPT4o_20241120 --mode infer
+# Run a single task (SMILES)
+python run.py --data smiles --model GPT4o_20241120
 
-# Multi-GPU (auto-detect)
-bash scripts/run.sh --data chem_smiles --model GPT4o_20241120 --mode infer
+# Run all three tasks at once (SMILES, Simplified Graph, Full Graph)
+python run.py --data smiles simple_graph carbon --model GPT4o_20241120
 
-# SLURM cluster
-bash scripts/srun.sh <partition> --data chem_graph_simple --model InternVL3.5-241B-A28B-API --mode infer
+# Increase parallel API calls for faster inference
+python run.py --data smiles --model GPT4o_20241120 --api-nproc 32
+
+# Resume an interrupted run (skip already completed samples)
+python run.py --data smiles --model GPT4o_20241120 --reuse
 ```
 
 **Key arguments:**
 
 | Argument | Description |
 | :--- | :--- |
-| `--data` | Dataset name, matching the TSV filename under `~/LMUData/` (without `.tsv`) |
+| `--data` | Recognition task to run: SMILES, Simplified Graph, or Full Graph (CARBON) |
 | `--model` | Model name as defined in `vlmeval/config.py` |
-| `--mode` | `infer` (inference only), `eval` (evaluation only), or `all` (both) |
 | `--work-dir` | Output directory (default: `./outputs`) |
-| `--api-nproc` | Number of parallel API calls (default: 4) |
+| `--api-nproc` | Number of parallel API calls (default: 4, increase for faster inference) |
 | `--reuse` | Reuse existing prediction files to resume interrupted runs |
 
 Prediction results will be saved to `VLMEvalKit/outputs/<model_name>/`.
+
+**Testing with your own model:**
+
+To evaluate a custom model, you need to implement a model wrapper in VLMEvalKit. At minimum, create a class with a `generate_inner(msgs, dataset=None)` method that takes a multi-modal message list and returns the model's prediction string. Then register it in `vlmeval/config.py`. For details, see the [VLMEvalKit Development Guide](https://github.com/open-compass/VLMEvalKit/blob/main/docs/en/Development.md#implement-a-new-model).
 
 ### Step 5: Convert Results
 
