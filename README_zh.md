@@ -5,7 +5,7 @@
 <h1 align="center">MolRecBench-Wild</h1>
 
 <p align="center">
-  <b>一种用于光学化学结构识别的现实世界基准测试</b>
+  <b>A Real-World Benchmark for Optical Chemical Structure Recognition</b>
 </p>
 
 <p align="center">
@@ -151,7 +151,7 @@ cd VLMEvalKit
 # 一次推理一个任务 (SMILES)
 python run.py --data smiles --model GPT4o_20241120
 
-# 一次推理三个任务 (SMILES, Simplified Graph, Full Graph)
+# 一次推理三个任务 (SMILES, Simplified Graph, Graph)
 python run.py --data smiles simple_graph carbon --model GPT4o_20241120
 
 # 使用并行API调用来提高推理速度

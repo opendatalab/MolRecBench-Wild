@@ -149,7 +149,7 @@ cd VLMEvalKit
 # Run a single task (SMILES)
 python run.py --data smiles --model GPT4o_20241120
 
-# Run all three tasks at once (SMILES, Simplified Graph, Full Graph)
+# Run all three tasks at once (SMILES, Simplified Graph, Graph)
 python run.py --data smiles simple_graph carbon --model GPT4o_20241120
 
 # Increase parallel API calls for faster inference
@@ -196,7 +196,7 @@ After inference, use the Evaluator to compute accuracy on three tracks. The Eval
 | :--- | :--- | :--- |
 | **SMILES Accuracy** | SMILES strings | Converts both GT and prediction to SMILES, then compares canonical SMILES string. |
 | **Simplified Graph Accuracy** | Atom symbols + bond types | Graph isomorphism on simplified molecular graph (ignoring charges, radicals, valences, isotopes, attachment point, brackets). |
-| **Graph Accuracy** | Full CARBON attributes | Graph isomorphism on the complete molecular graph including all attributes. |
+| **Graph Accuracy** | CARBON | Graph isomorphism on the complete molecular graph including all attributes. |
 
 **Running evaluation:**
 
