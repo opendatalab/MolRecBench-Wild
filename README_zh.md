@@ -5,7 +5,7 @@
 <h1 align="center">MolRecBench-Wild</h1>
 
 <p align="center">
-  <b>A Real-World Benchmark for Optical Chemical Structure Recognition</b>
+  <b>一种用于光学化学结构识别的现实世界基准测试</b>
 </p>
 
 <p align="center">
@@ -16,7 +16,7 @@
 </p>
 
 <p align="center">
-  <a href="README_zh.md">🇨🇳 中文文档</a>
+  <a href="README.md">🇬🇧 English</a>
 </p>
 
 <p align="center">
@@ -25,9 +25,9 @@
 
 ## 🔥 News
 
-- 🚀 [04/07/2026] Our paper is accepted by **CVPRF 2026**!
+- 🚀 [04/07/2026] 论文被CVPRF接收!
 
-## 📊 Dataset Statistics
+## 📊 数据集统计
 
 | Feature | MolRecBench-Wild | Traditional Benchmarks (e.g., USPTO, Staker) |
 | :--- | :--- | :--- |
@@ -39,7 +39,7 @@
 | **Complex Structure Support** | Non-standard bonds, icon groups, mixed valences | Standard structures only |
 
 
-## CARBON Notation
+## CARBON 数据格式
 
 <p align="center">
   <img src="assets/10.1002_anie.202405775_8_figure_1_mol_2.jpg" width="45%" alt="Example Image" />
@@ -91,30 +91,31 @@
 }
 ```
 
-## ⚡ Quick Start
+## ⚡ 快速开始
 
-### Step 1:  Setup Environment
+### 第一步:  环境安装
 
 ```bash
 git clone https://github.com/your-username/MolRecBench-Wild.git
 cd MolRecBench-Wild
 
-# Install dependencies
+# 创建虚拟环境
 conda create -n molrec python=3.10 -y
+# 安装依赖
 pip install -r requirements.txt
 ```
 
-### Step 2: Setup VLMEvalKit
+### 第二步: 配置 VLMEvalKit
 
-We use [VLMEvalKit](https://github.com/open-compass/VLMEvalKit) as the inference backend, with minimal patches to add chemistry-specific model adapters and datasets. Our patches are provided in [`patches/`](./patches/) for full transparency — we do not redistribute VLMEvalKit itself.
+我们使用 [VLMEvalKit](https://github.com/open-compass/VLMEvalKit) 进行模型推理，并进行了最小化修改，以添加面向化学任务的模型适配器和数据集。所有修改均在 [`patches/`](./patches/) 目录中提供以确保完全透明——我们不会重新分发 VLMEvalKit 本身。
 
-Run the one-click setup script:
+运行一键安装脚本:
 
 ```bash
 bash setup_vlmevalkit.sh
 ```
 
-After setup, create a file named ".env" in the VLMEvalKit directory and configure your API keys:
+之后，在 VLMEvalKit 目录下创建一个名为 “.env” 的文件，并配置你的 API 密钥：
 
 ```bash
 # VLMEvalKit/.env
@@ -122,132 +123,134 @@ OPENAI_API_BASE=https://your-api-base-url
 OPENAI_API_KEY=your-api-key
 ```
 
-### Step 3: Download & Convert Data
+### 第三步: 下载并转换数据集
 
-Download the dataset from HuggingFace and convert it to VLMEvalKit TSV format in one step:
+从 HuggingFace 下载数据集，并一步将其转换为 VLMEvalKit 的 TSV 格式：
 
 ```bash
-# Defaulit: download all tracks data
+# 默认: 下载数据集，并转换成所有需要的格式，包括用于仅预测SMILES的推理格式，预测简化图的推理格式，以及预测图的推理格式
 python download_and_convert.py --prompt all             # generate TSV for all three tracks
 
-# Download dataset and convert to SMILES track TSV
+# 下载数据集，并转成金预测SMILES的推理格式
 python download_and_convert.py --prompt smiles
 
-python download_and_convert.py --prompt smiles --skip-download  # skip download if dataset/ already exists
+# 如果数据集已经下载，可以通过 skip-download 参数来仅转换格式
+python download_and_convert.py --prompt smiles --skip-download
 ```
 
-The script will:
-1. Download images to `./dataset/images/` and save ground truth to `./dataset/annotation.jsonl`
-2. Generate TSV files to `./LMUData/`
-3. Automatically register the `LMUData` path in `VLMEvalKit/.env` so VLMEvalKit can find the TSV files
+这个脚本会进行如下操作:
+1. 下载数据集到 `./dataset/images/` 并且保存标注信息到 `./dataset/annotation.jsonl`
+2. 生成 TSV 文件保存到 `./LMUData/`
+3. 自动在 `VLMEvalKit/.env` 中注册 `LMUData` 路径，以便 VLMEvalKit 能够找到这些 TSV 文件。
 
-### Step 4: Run Inference
+### 第四步: 运行推理脚本
 
 ```bash
 cd VLMEvalKit
 
-# Run a single task (SMILES)
+# 一次推理一个任务 (SMILES)
 python run.py --data smiles --model GPT4o_20241120
 
-# Run all three tasks at once (SMILES, Simplified Graph, Full Graph)
+# 一次推理三个任务 (SMILES, Simplified Graph, Full Graph)
 python run.py --data smiles simple_graph carbon --model GPT4o_20241120
 
-# Increase parallel API calls for faster inference
+# 使用并行API调用来提高推理速度
 python run.py --data smiles --model GPT4o_20241120 --api-nproc 32
 
-# Resume an interrupted run (skip already completed samples)
+# 恢复一个中断的运行（跳过已完成的样本）
 python run.py --data smiles --model GPT4o_20241120 --reuse
 ```
 
-**Key arguments:**
+**关键参数:**
 
-| Argument | Description |
+| 参数 | 描述 |
 | :--- | :--- |
-| `--data` | Recognition task to run: SMILES, Simplified Graph, or Graph |
-| `--model` | Model name as defined in `vlmeval/config.py` |
-| `--work-dir` | Output directory (default: `./outputs`) |
-| `--api-nproc` | Number of parallel API calls (default: 4, increase for faster inference) |
-| `--reuse` | Reuse existing prediction files to resume interrupted runs |
+| `--data` | 要运行的识别任务：SMILES、简化图（Simplified Graph）或图（Graph） |
+| `--model` | `vlmeval/config.py`中定义的模型名称 |
+| `--work-dir` | 输出文件夹 (default: `./outputs`) |
+| `--api-nproc` | 并行 API 调用的数量（默认值为 4，可增大以加快推理速度） |
+| `--reuse` | 复用已有的预测文件以恢复中断的运行 |
 
-Prediction results will be saved to `VLMEvalKit/outputs/<model_name>/`.
+预测结果将会被保存在 `VLMEvalKit/outputs/<model_name>/`.
 
-**Testing with your own model:**
+**测试你自己的模型:**
 
-To evaluate a custom model, you need to implement a model wrapper in VLMEvalKit. At minimum, create a class with a `generate_inner(msgs, dataset=None)` method that takes a multi-modal message list and returns the model's prediction string. Then register it in `vlmeval/config.py`. For details, see the [VLMEvalKit Development Guide](https://github.com/open-compass/VLMEvalKit/blob/main/docs/en/Development.md#implement-a-new-model).
+要评估自定义模型，你需要在 VLMEvalKit 中实现一个模型封装（wrapper）。至少需要创建一个包含 `generate_inner(msgs, dataset=None)` 方法的类，该方法接收多模态消息列表并返回模型的预测字符串。随后，将该模型注册到 `vlmeval/config.py` 中。详细说明请参阅 [VLMEvalKit 开发指南](https://github.com/open-compass/VLMEvalKit/blob/main/docs/en/Development.md#implement-a-new-model)。
 
-### Step 5: Convert Results
+### 第五步: 转换预测结果格式
 
-VLMEvalKit outputs an XLSX file per run. Convert it to the JSONL format expected by the Evaluator:
+VLMEvalKit 每次运行都会输出一个 XLSX 文件。将其转换为 Evaluator 所需的 JSONL 格式：
 
 ```bash
-# Convert XLSX → Evaluator JSONL
+# 将 XLSX 转换为 Evaluator 所需的 JSONL 格式
 python convert_result.py \
     -i "VLMEvalKit/outputs/GPT4o_20241120/T20260413_G/GPT4o_20241120_chem_smiles.xlsx" \
     -o "results/GPT4o_20241120_chem_smiles.jsonl"
 ```
 
-### Step 6: Evaluation
+### 第六步: 评估
 
-After inference, use the Evaluator to compute accuracy on three tracks. The Evaluator takes two JSONL files — ground truth and predictions.
+推理完成后，使用 Evaluator 在三个任务上计算准确率。
+Evaluator 接收两个 JSONL 文件——标注信息（ground truth）和预测结果（predictions）。
 
 **Evaluation metrics:**
 
 | Metric | What it compares | Description |
 | :--- | :--- | :--- |
-| **SMILES Accuracy** | SMILES strings | Converts both GT and prediction to SMILES, then compares canonical SMILES string. |
-| **Simplified Graph Accuracy** | Atom symbols + bond types | Graph isomorphism on simplified molecular graph (ignoring charges, radicals, valences, isotopes, attachment point, brackets). |
-| **Graph Accuracy** | Full CARBON attributes | Graph isomorphism on the complete molecular graph including all attributes. |
+| **SMILES 准确率** | SMILES字符串 | 将真实标签（GT）和预测结果都转换为带有超原子（superatom）处理的 SMILES 表示，然后比较其规范化（canonical）SMILES 字符串。 |
+| **简化图准确率** | 原子符号和键类型 | 在简化的分子图上进行图同构判断（忽略电荷、自由基、价态、同位素、连接点和括号等信息）。|
+| **图准确率** | 完整的CARBON信息 | 在完整的分子图上进行图同构判断，包括所有属性信息。|
 
-**Running evaluation:**
+**运行评估命令:**
 
 ```bash
 python evaluate/eval_SMILES.py --gt_path dataset/annotation.jsonl --pred_path results/GPT4o_20241120_chem_smiles.jsonl
-# Output:
+# 输出:
 # SMILES Precision: 0.0797
 
 python evaluate/eval_S_GRAPH.py --gt_path dataset/annotation.jsonl --pred_path results/GPT4o_20241120_chem_graph_simple.jsonl
-# Output:
+# 输出:
 # Simplified Graph Precision: 0.0374
 
 python evaluate/eval_GRAPH.py --gt_path dataset/annotation.jsonl --pred_path results/GPT4o_20241120_chem.jsonl
-# Output:
+# 输出:
 # SMILES Precision          : 0.0
 # Simplified Graph Precision: 0.0344
 # Graph Precision           : 0.0298
 ```
 
-## Benchmark Results
+## 基准测试结果
 
-We evaluated 18 mainstream models, revealing that existing methods suffer significant performance drops in real-world scenarios.
-_Underlined values indicate the best results within each class, and bold values represent the overall best results across all classes._
+我们评估了 18 个主流模型，结果表明现有方法在真实世界场景中存在显著的性能下降。
+带下划线的数值表示各类别中的最佳结果，加粗数值表示所有类别中的总体最佳结果。
 
 | Method | SMILES | Simplified Graph | Graph |
 |--------|--------|------------------|-------|
-| **SMILES-based Expert Models** |||| 
+| **基于 SMILES 的专家模型** |||| 
 | OCSU | 5.74 | - | - |
 | DECIMERv2.2 | <u>20.27</u> | - | - |
-| **Graph-based Expert Models** |||| 
+| **基于图的专家模型** |||| 
 | MolGrapher | 18.69 | 13.70 | - |
 | MolNexTR | 30.57 | 32.03 | - |
 | MolScribe | 28.11 | 32.35 | - |
 | GTR-Mol-VLM | <u>**33.32**</u> | <u>**32.66**</u> | - |
-| **Vision Language Models** |||| 
+| **视觉语言模型** |||| 
 | GPT-4o | 7.52 | 3.69 | 3.02 |
 | Qwen-VL-Max | 6.62 | 5.77 | <u>3.89</u> |
 | InternVL3.5 | <u>24.39</u> | <u>6.83</u> | 3.73 |
 | ChemVLM† | 4.69 | - | - |
 | ChemDFM-X† | 9.43 | - | - |
-| **Vision Reasoning Models** |||| 
+| **视觉推理模型** |||| 
 | GPT-5 | 18.44 | 9.93 | 8.20 |
 | Seed1.6-Thinking | 14.20 | 7.05 | 4.54 |
 | Intern-S1 | 17.89 | 6.56 | 3.44 |
 | Gemini 2.5 Pro | <u>27.50</u> | <u>15.58</u> | <u>**12.50**</u> |
 | GLM-4.5V | 12.66 | 7.66 | 4.19 |
-| **Tools** |||| 
+| **工具** |||| 
 | Mathpix | <u>27.32</u> | - | - |
 | Logics-Parsing | 14.57 | - | - |
 
-Please refer to the paper for complete results.
+完整结果请参阅论文。
 
 
 <!-- ## Citation
