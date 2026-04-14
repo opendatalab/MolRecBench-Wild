@@ -42,6 +42,7 @@ PROMPT_MAP = {
 def encode_image_to_base64(image: Image.Image) -> str:
     import base64
     import io
+
     buffer = io.BytesIO()
     fmt = image.format or "PNG"
     image.save(buffer, format=fmt)
@@ -62,7 +63,9 @@ def download_dataset():
     dataset = load_dataset(DATASET_NAME, split="test")
 
     annotation = []
-    for idx, row in tqdm(enumerate(dataset), desc="Downloading images", total=len(dataset)):
+    for idx, row in tqdm(
+        enumerate(dataset), desc="Downloading images", total=len(dataset)
+    ):
         image = row["image"]
         sample_id = row["id"]
         image_path = IMAGE_PATH / sample_id
@@ -120,19 +123,27 @@ def convert_to_tsv(annotation_path, prompt_name, num_samples=None):
             img = Image.open(image_path)
             image_base64 = encode_image_to_base64(img)
 
-            rows.append({
-                "index": data.get("id", ""),
-                "image": image_base64,
-                "image_url": image_path,
-                "question": question_text,
-                "answer": "",
-            })
+            rows.append(
+                {
+                    "index": data.get("id", ""),
+                    "image": image_base64,
+                    "image_url": image_path,
+                    "question": question_text,
+                    "answer": "",
+                }
+            )
 
     if rows:
         with open(output_tsv, "w", encoding="utf-8", newline="") as f:
             writer = csv.DictWriter(
                 f,
-                fieldnames=["index", "image", "image_url", "question", "answer"],
+                fieldnames=[
+                    "index",
+                    "image",
+                    "image_url",
+                    "question",
+                    "answer",
+                ],
                 delimiter="\t",
                 quoting=csv.QUOTE_MINIMAL,
             )
@@ -150,8 +161,10 @@ def update_vlmevalkit_env():
 
     if VLMEVALKIT_ENV.exists():
         content = VLMEVALKIT_ENV.read_text(encoding="utf-8")
-        if re.search(r'^LMUData=', content, re.MULTILINE):
-            content = re.sub(r'^LMUData=.*$', env_line, content, flags=re.MULTILINE)
+        if re.search(r"^LMUData=", content, re.MULTILINE):
+            content = re.sub(
+                r"^LMUData=.*$", env_line, content, flags=re.MULTILINE
+            )
         else:
             content = content.rstrip("\n") + "\n" + env_line + "\n"
         VLMEVALKIT_ENV.write_text(content, encoding="utf-8")
@@ -172,7 +185,8 @@ def main():
         help="Which prompt/track to use (default: smiles)",
     )
     parser.add_argument(
-        "-n", "--num-samples",
+        "-n",
+        "--num-samples",
         type=int,
         default=None,
         help="Only convert first N samples (default: all)",
