@@ -93,13 +93,10 @@ class MolGraph:
             super_index_init=super_index_init,
         )
         mol = Chem.MolFromMolBlock(mol_block)
-
+        if mol is None:
+            return "", super_atom_map
         smiles = Chem.MolToSmiles(mol, isomericSmiles=True)
-        # Recover superatoms
-        if debug:
-            print("Recover superatom symbols")
-            print(f"super_atom_map:{super_atom_map}")
-            print(f"smiles:{smiles}")
+
         for symbol, idx in super_atom_map.items():
             if symbol.startswith("[") and symbol.endswith("]"):
                 symbol = symbol[1:-1]

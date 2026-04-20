@@ -14,13 +14,14 @@ if __name__ == "__main__":
     args = parser.parse_args()
     print("*" * 100)
     print(f"Evaluating: {args.pred_path}")
-    # 加载参考的评估结果
-    with jsonlines.open(args.gt_path) as reader:
+    gt_path = args.gt_path
+    pred_path = args.pred_path
+    # gt_path = "dataset/annotation.jsonl"
+    # pred_path = "results/Graph-based_Expert_Models/GTR-Mol-VLM/GTR-Mol-VLM_graph_simple.jsonl"
+    with jsonlines.open(gt_path) as reader:
         gt_list = list(reader)
-    pred_list = []
-    with jsonlines.open(args.pred_path) as reader:
-        for item in reader:
-            pred_list.append(item)
+    with jsonlines.open(pred_path) as reader:
+        pred_list = list(reader)
 
     evaluator = Evaluator(gt_list=gt_list, pred_list=pred_list, debug=True)
     success, correct = evaluator.evaluate_simplified_graph()

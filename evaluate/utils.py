@@ -4,6 +4,7 @@ import io
 import re
 from rdkit import Chem
 from evaluate.constants import ABBR2MOLBLOCK, GREEK_LETTERS, CONFLICT_SYMBOLS
+import copy
 
 
 def parse_attach_points_v2000(molblock: str):
@@ -246,14 +247,9 @@ def replace_superatom_with_mol(smiles_main: str, canonical=True, debug=False):
     mol_final = mol_main_rm.GetMol()
     # mol_final = Chem.RemoveHs(mol_final)
     # Chem.SanitizeMol(mol_final)
-    try:
-        smiles_exp = Chem.MolToSmiles(
-            mol_final, canonical=canonical, kekuleSmiles=True
-        )
-    except Exception as e:
-        smiles_exp = Chem.MolToSmiles(
-            mol_final, canonical=canonical, kekuleSmiles=False
-        )
+    smiles_exp = Chem.MolToSmiles(
+        mol_final, canonical=canonical, kekuleSmiles=False
+    )
     # Replace the unexpanded abbreviations back
     missing_abbrs = []
     for superatom, isotope_atom in superatom_map.items():
@@ -362,11 +358,11 @@ def get_max_isotope_in_smiles(smiles, debug=False):
     """
     try:
         matches = re.findall(r"\[(\d+)\*]", smiles)
-        return max(int(match) for match in matches) if matches else 0
+        return max(int(match) for match in matches) if matches else 2
     except Exception as e:
         if debug:
             print(f"Error in get_max_isotope_in_smiles: {e}")
-        return 0
+        return 2
 
 
 def atomwise_tokenizer(smi, exclusive_tokens=None):
@@ -420,7 +416,7 @@ def canonicalize_smiles_w_superatom(
     super_index = max(super_index, len(super_atom_map))
     succeed = True
     if type(smiles) is not str or smiles == "":
-        return "", {}, False
+        return "", {}
     if ignore_cistrans:
         smiles = smiles.replace("/", "").replace("\\", "")
 
@@ -463,7 +459,7 @@ def canonicalize_smiles_w_superatom(
         smiles = smiles.replace("/", "").replace("\\", "")
     if debug:
         print(f"INFO DEBUG: canonicalize result: {succeed}")
-    return smiles
+    return smiles, super_atom_map
 
 
 def convert_graph_to_mol_block(
@@ -484,9 +480,6 @@ def convert_graph_to_mol_block(
     This function is used to convert a graph to a MolBlock, where the charge, isotope, radical, AttachPoint, etc. need to be added to the MolBlock
     NOTE: The bracket functionality has not been added to the MolBlock yet
     """
-    # TODO: 1. Convert the list to numpy
-    bonds = np.array(bonds_list)
-
     # TODO: 2. Create an empty molecule
     mol = Chem.RWMol()  # Create an empty molecule
     atom_num = len(symbols)  # Get the number of atoms
@@ -542,7 +535,7 @@ def convert_graph_to_mol_block(
             assert idx == i  # Ensure the index is correct
             ids.append(idx)  # Add the index to the ID list
     # Need to ensure that the chiral bond is from C to any atom
-    for i, j, bt in bonds:
+    for i, j, bt in bonds_list:
         if bt == 1:
             mol.AddBond(ids[i], ids[j], Chem.BondType.SINGLE)
         elif bt == 2:
@@ -563,13 +556,16 @@ def convert_graph_to_mol_block(
             )
 
     # Convert the bonds list to a bonds matrix
-    bonds_matrix = convert_bonds_list_to_bonds_matrix(bonds, atom_num)
+    bonds_matrix = convert_bonds_list_to_bonds_matrix(bonds_list, atom_num)
     # Verify the chirality
     mol = verify_chirality_evaluation(
         mol, coords, symbols, bonds_matrix, debug=debug
     )
     # Convert the molecule to a mol block
-    mol_block = Chem.MolToMolBlock(mol)
+    try:
+        mol_block = Chem.MolToMolBlock(mol, kekulize=True)
+    except Exception as e:
+        mol_block = Chem.MolToMolBlock(mol, kekulize=False)
     return mol_block, super_atom_map
 
 
@@ -587,6 +583,7 @@ def verify_chirality_evaluation(
     Returns:
         mol: a molecule with the chirality corrected
     """
+    init_mol = copy.deepcopy(mol)
     try:
         n = mol.GetNumAtoms()
         mol_tmp = mol.GetMol()
@@ -655,9 +652,8 @@ def verify_chirality_evaluation(
             if atom.GetSymbol() != "C":
                 atom.SetChiralTag(Chem.rdchem.ChiralType.CHI_UNSPECIFIED)
         mol = mol.GetMol()
-
+        return mol
     except Exception as e:
         if debug:
             print(f"Error verifying chirality evaluation: {e}")
-        raise e
-    return mol
+        return init_mol

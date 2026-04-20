@@ -14,13 +14,10 @@ from rdkit import RDLogger
 
 
 def load_gt_smiles(gt_path):
-    """
-    加载GT注释文件，返回{id: smiles}的字典
-    """
     gt_smiles = {}
     with jsonlines.open(gt_path) as reader:
         gt_annotation = list(reader)
-    for item in gt_annotation:
+    for item in tqdm(gt_annotation, desc="Loading GT SMILES"):
         try:
             mol_graph_gt = MolGraph(
                 carbon_info={
@@ -37,6 +34,8 @@ def load_gt_smiles(gt_path):
                 }
             )
             smiles_gt, super_atom_map_gt = mol_graph_gt.dump_to_SMILES()
+            if smiles_gt == "":
+                continue
             gt_smiles[item["id"]] = smiles_gt
         except Exception as e:
             continue
@@ -44,9 +43,6 @@ def load_gt_smiles(gt_path):
 
 
 def load_pred_smiles(pred_path):
-    """
-    加载预测结果文件，返回{id: smiles}的字典
-    """
     pred_smiles = {}
     with jsonlines.open(pred_path) as reader:
         pred_annotation = list(reader)
@@ -70,10 +66,11 @@ def evaluate_smiles(gt_smiles, pred_smiles):
         smiles_pred = replace_superatom_with_mol(smiles_pred)
         smiles_gt = canonicalize_smiles_w_superatom(smiles_gt)
         smiles_pred = canonicalize_smiles_w_superatom(smiles_pred)
-        if smiles_gt == smiles_pred:
+        if smiles_gt == smiles_pred and smiles_gt != "" and smiles_pred != "":
             success_count += 1
         total_count += 1
-
+    print(f"Total count: {total_count}")
+    print(f"Success count: {success_count}")
     print(f"SMILES Precision: {round(success_count / total_count, 4)}")
 
 
@@ -85,7 +82,6 @@ if __name__ == "__main__":
 
     print("*" * 100)
     print(f"Evaluating: {args.pred_path}")
-
     # Only show severe errors, suppress warnings and information
     lg = RDLogger.logger()
     lg.setLevel(RDLogger.CRITICAL)
@@ -94,6 +90,5 @@ if __name__ == "__main__":
     gt_smiles = load_gt_smiles(args.gt_path)
     # load pred results
     pred_smiles = load_pred_smiles(args.pred_path)
-
     # evaluate
     evaluate_smiles(gt_smiles, pred_smiles)
