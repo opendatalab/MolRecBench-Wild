@@ -22,7 +22,9 @@ def dataframe_to_jsonl(df, jsonl_path, is_smiles_only=False):
     carbon_info_list = []
 
     for idx, row in df.iterrows():
-        id = str(row["index"]) + ".jpg"
+        id = str(row["index"])
+        if ".jpg" not in jsonl_path:
+            id += ".jpg"
         if is_smiles_only:
             try:
                 smiles = re.search(
@@ -56,19 +58,32 @@ def dataframe_to_jsonl(df, jsonl_path, is_smiles_only=False):
                     "brackets": None,
                 }
         else:
-            try:
-                carbon_info = safe_json_loads(row["prediction"])
-            except Exception:
-                match = re.search(
-                    r"```json\s*([\s\S]*?)\s*```", str(row["prediction"])
-                )
-                if match is None:
-                    carbon_info = None
-                else:
-                    try:
-                        carbon_info = safe_json_loads(match.group(1))
-                    except Exception:
+            if "glm" in jsonl_path.lower():
+                try:
+                    match = re.search(
+                        r"<\|begin_of_box\|>([\s\S]*?)<\|end_of_box\|>",
+                        row["prediction"],
+                    )
+                    if match is None:
                         carbon_info = None
+                    else:
+                        carbon_info = safe_json_loads(match.group(1))
+                except Exception:
+                    carbon_info = None
+            else:
+                try:
+                    carbon_info = safe_json_loads(row["prediction"])
+                except Exception:
+                    match = re.search(
+                        r"```json\s*([\s\S]*?)\s*```", str(row["prediction"])
+                    )
+                    if match is None:
+                        carbon_info = None
+                    else:
+                        try:
+                            carbon_info = safe_json_loads(match.group(1))
+                        except Exception:
+                            carbon_info = None
             if carbon_info:
                 if "atoms" in carbon_info:
                     atoms = carbon_info.get("atoms", [])
@@ -255,7 +270,17 @@ def main(excel_path, jsonl_path):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("-i", "--input", type=str, required=True)
-    parser.add_argument("-o", "--output", type=str, required=True)
+    parser.add_argument(
+        "-i",
+        "--input",
+        default="results_origin/QwenVLMax-OpenAI/QwenVLMax-OpenAI_chem_smiles.xlsx",
+    )
+    parser.add_argument(
+        "-o",
+        "--output",
+        default="results/Vision_Language_Models/Qwen-VL-Max/Qwenvlmax_smiles.jsonl",
+    )
     args = parser.parse_args()
-    main(args.input, args.output)
+    input_path = args.input
+    output_path = args.output
+    main(input_path, output_path)

@@ -34,7 +34,7 @@
 | **Source** | Academic Articles | Patents / Synthetic |
 | **Sample Count** | 5029 | Varies (usually larger but simpler) |
 | **Visual Difficulty Labels** | 18 Categories | < 10 Categories |
-| **Chemical Difficulty Labels** | 24 Categories (MOSAIC subset) | < 3 Categories |
+| **Chemical Difficulty Labels** | 19 Categories (MOSAIC subset) | < 3 Categories |
 | **Ground Truth** | CARBON, Graph, SMILES | SMILES, MolFile |
 | **Complex Structure Support** | Non-standard bonds, icon groups, mixed valences | Standard structures only |
 
@@ -227,28 +227,28 @@ python evaluate/eval_GRAPH.py --gt_path dataset/annotation.jsonl --pred_path res
 | Method | SMILES | Simplified Graph | Graph |
 |--------|--------|------------------|-------|
 | **基于 SMILES 的专家模型** |||| 
-| OCSU | 5.74 | - | - |
-| DECIMERv2.2 | <u>20.27</u> | - | - |
+| OCSU | 6.06 | - | - |
+| DECIMERv2.2 | 22.84 | - | - |
 | **基于图的专家模型** |||| 
-| MolGrapher | 18.69 | 13.70 | - |
-| MolNexTR | 30.57 | 32.03 | - |
-| MolScribe | 28.11 | 32.35 | - |
-| GTR-Mol-VLM | <u>**33.32**</u> | <u>**32.66**</u> | - |
+| MolGrapher | 20.33 | 22.81 | - |
+| MolNexTR | 40.9 | 34.42 | - |
+| MolScribe | 41.05 | 34.74 | - |
+| GTR-Mol-VLM | 40.43 | 35.22 | - |
 | **视觉语言模型** |||| 
-| GPT-4o | 7.52 | 3.69 | 3.02 |
-| Qwen-VL-Max | 6.62 | 5.77 | <u>3.89</u> |
-| InternVL3.5 | <u>24.39</u> | <u>6.83</u> | 3.73 |
-| ChemVLM† | 4.69 | - | - |
-| ChemDFM-X† | 9.43 | - | - |
+| GPT-4o | 19.68 | 3.74 | 2.94 |
+| Qwen-VL-Max |6.95 | 5.83 | 3.66 |
+| InternVL3.5 | 25.6 | 6.88 | 3.08 |
+| ChemVLM† | 4.79 | - | - |
+| ChemDFM-X† | 9.75 | - | - |
 | **视觉推理模型** |||| 
-| GPT-5 | 18.44 | 9.93 | 8.20 |
-| Seed1.6-Thinking | 14.20 | 7.05 | 4.54 |
-| Intern-S1 | 17.89 | 6.56 | 3.44 |
-| Gemini 2.5 Pro | <u>27.50</u> | <u>15.58</u> | <u>**12.50**</u> |
-| GLM-4.5V | 12.66 | 7.66 | 4.19 |
+| GPT-5 | 19.68 | 10.0 | 8.19 |
+| Seed1.6-Thinking | 15.6 | 7.14 | 4.61 |
+| Intern-S1 | 18.98 | 6.62 | 3.46 |
+| Gemini 2.5 Pro | 30.06 | 15.67 | 13.04 |
+| GLM-4.5V | 12.13 |7.89 | 4.26 |
 | **工具** |||| 
-| Mathpix | <u>27.32</u> | - | - |
-| Logics-Parsing | 14.57 | - | - |
+| Mathpix | 17.88 | - | - |
+| Logics-Parsing | 15.47 | - | - |
 
 完整结果请参阅论文。
 

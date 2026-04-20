@@ -168,4 +168,5 @@ tmp
 # VLMEvalKit (cloned by setup script, not tracked in this repo)
 VLMEvalKit/
 LMUData/
-result*
+results_init
+results_csv

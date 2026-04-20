@@ -62,6 +62,7 @@ class Evaluator:
                 mol_graph_gt = MolGraph(id=img_id_gt)
             self.mol_graph_gts[img_id_gt] = mol_graph_gt
         # 处理 Pred
+        pred_load_success = 0
         for i in range(len(pred_list)):
             img_id_pred = pred_list[i]["id"]
             try:
@@ -79,6 +80,7 @@ class Evaluator:
                         "brackets": pred_list[i]["brackets"],
                     },
                 )
+                pred_load_success += 1
             except Exception as e:
                 if self.debug:
                     print("*" * 100)
@@ -86,6 +88,7 @@ class Evaluator:
                     print(f"pred_list[i]: {pred_list[i]}")
                 mol_graph_pred = MolGraph(id=img_id_pred)
             self.mol_graph_preds[img_id_pred] = mol_graph_pred
+        print(f"Pred load success: {pred_load_success}")
 
     def evaluate_simplified_graph(self):
         node_match = isomorphism.categorical_node_match("symbol", None)
@@ -335,6 +338,7 @@ class Evaluator:
                 if debug:
                     print(f"ERROR SMILES Pred: {e}")
                 continue
+
             if expand:
                 smiles_gt_canonical, super_atom_map, succeed = (
                     canonicalize_smiles_w_superatom(
@@ -415,47 +419,3 @@ class Evaluator:
     def save_attribute_result(self, save_path):
         with open(save_path, "w") as f:
             json.dump(self.attribute, f, indent=4)
-
-
-if __name__ == "__main__":
-    parser = argparse.ArgumentParser(
-        description="Evaluate molecule predictions."
-    )
-    parser.add_argument(
-        "--gt_path",
-        type=str,
-        required=True,
-        help="Path to ground truth .jsonl file",
-    )
-    parser.add_argument(
-        "--pred_path",
-        type=str,
-        required=True,
-        help="Path to prediction .jsonl file",
-    )
-    parser.add_argument(
-        "--save_path", type=str, help="Path to save eval info json"
-    )
-    args = parser.parse_args()
-
-    # 加载参考的评估结果
-    with jsonlines.open(args.gt_path) as reader:
-        gt_list = list(reader)
-    with jsonlines.open(args.pred_path) as reader:
-        pred_list = list(reader)
-
-    evaluator = Evaluator(gt_list=gt_list, pred_list=pred_list)
-    success, smiles_correct = evaluator.evaluate_smiles(expand=True)
-    print(
-        f"SMILES           Success: {success}, Correct: {smiles_correct} R: {round(smiles_correct / success, 4)}"
-    )
-    success, correct = evaluator.evaluate_simplified_graph()
-    print(
-        f"Simplified Graph Success: {success}, Correct: {correct} R: {round(correct / success, 4)}"
-    )
-    success, correct = evaluator.evaluate_graph()
-    print(
-        f"Graph            Success: {success}, Correct: {correct} R: {round(correct / success, 4)}"
-    )
-    if args.save_path:
-        evaluator.save_eval_info(args.save_path)
