@@ -10,7 +10,7 @@
 
 <p align="center">
   <a href="https://arxiv.org/abs/2511.02384"><img src="https://img.shields.io/badge/arXiv-2511.02384-b31b1b.svg" alt="arXiv"></a>
-  <a href="https://huggingface.co/datasets/opendatalab/U-MolRecBench-Wild"><img src="https://img.shields.io/badge/🤗%20Dataset-U--MolRecBench--Wild-blue" alt="Dataset"></a>
+  <a href="https://huggingface.co/datasets/opendatalab/MolRecBench-Wild"><img src="https://img.shields.io/badge/🤗%20Dataset-MolRecBench--Wild-blue" alt="Dataset"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-Apache%202.0-green.svg" alt="License"></a>
 
 </p>
@@ -232,7 +232,7 @@ _Underlined values indicate the best results within each class, and bold values 
 | MolScribe | 41.05 | 34.74 | - |
 | GTR-Mol-VLM | 40.43 | 35.22 | - |
 | **Vision Language Models** |||| 
-| GPT-4o | 19.68 | 3.74 | 2.94 |
+| GPT-4o | 7.94 | 3.74 | 2.94 |
 | Qwen-VL-Max |6.95 | 5.83 | 3.66 |
 | InternVL3.5 | 25.6 | 6.88 | 3.08 |
 | ChemVLM† | 4.79 | - | - |
@@ -244,7 +244,7 @@ _Underlined values indicate the best results within each class, and bold values 
 | Gemini 2.5 Pro | 30.06 | 15.67 | 13.04 |
 | GLM-4.5V | 12.13 |7.89 | 4.26 |
 | **Tools** |||| 
-| Mathpix | 17.88 | - | - |
+| Mathpix | 27.88 | - | - |
 | Logics-Parsing | 15.47 | - | - |
 
 Please refer to the paper for complete results.
