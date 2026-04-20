@@ -218,7 +218,7 @@ python evaluate/eval_GRAPH.py --gt_path dataset/annotation.jsonl --pred_path res
 
 ## Benchmark Results
 
-We evaluated 18 mainstream models, revealing that existing methods suffer significant performance drops in real-world scenarios.
+We evaluated 18 mainstream models(The inference results are saved in the `results` folder), revealing that existing methods suffer significant performance drops in real-world scenarios.
 _Underlined values indicate the best results within each class, and bold values represent the overall best results across all classes._
 
 | Method | SMILES | Simplified Graph | Graph |
