@@ -24,5 +24,5 @@
 # python evaluate/eval_SMILES.py --gt_path dataset/annotation.jsonl --pred_path results/Vision_Reasoning_Models/GLM-4.5V/glm45_smiles.jsonl
 
 # ## Tools
-python evaluate/eval_SMILES.py --gt_path dataset/annotation.jsonl --pred_path results/Tools/Mathpix/Mathpix_chem_smiles_with_url.jsonl
-python evaluate/eval_SMILES.py --gt_path dataset/annotation.jsonl --pred_path results/Tools/Logics-Parsing/logic-parsing-smiles.jsonl
+# python evaluate/eval_SMILES.py --gt_path dataset/annotation.jsonl --pred_path results/Tools/Mathpix/Mathpix_chem_smiles_with_url.jsonl
+# python evaluate/eval_SMILES.py --gt_path dataset/annotation.jsonl --pred_path results/Tools/Logics-Parsing/logic-parsing-smiles.jsonl
