@@ -9,7 +9,7 @@
 </p>
 
 <p align="center">
-  <!-- <a href="https://arxiv.org/abs/2511.02384"><img src="https://img.shields.io/badge/arXiv-2511.02384-b31b1b.svg" alt="arXiv"></a> -->
+  <a href="https://arxiv.org/abs/2605.05832"><img src="https://img.shields.io/badge/arXiv-2605.05832-b31b1b.svg" alt="arXiv"></a>
   <a href="https://huggingface.co/datasets/opendatalab/MolRecBench-Wild"><img src="https://img.shields.io/badge/🤗%20Dataset-MolRecBench--Wild-blue" alt="Dataset"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-Apache%202.0-green.svg" alt="License"></a>
 
