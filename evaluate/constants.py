@@ -37,6 +37,52 @@ BOND_TYPES = {
     "triple_with_single_dash": 22,  # 单虚双实键
     "TRIPLE_WITH_DOUBLE_DASHED_BOND_ID": 23,  # 双虚单实键
 }
+EQUAL_ABBREVIATION = {
+    # 丙基类
+    "[n-Pr]": "[nPr]",
+    "[i-Pr]": "[iPr]",
+    # 丁基类
+    "[n-Bu]": "[nBu]",
+    "[i-Bu]": "[iBu]",
+    "[s-Bu]": "[sBu]",
+    "[t-Bu]": "[tBu]",
+    # 戊基类
+    "[n-Pent]": "[nPent]",
+    "[i-Pent]": "[iPent]",
+    "[s-Pent]": "[sPent]",
+    "[t-Pent]": "[tPent]",
+    "[neo-Pent]": "[neoPent]",  # 新戊基: (CH3)3CCH2–
+    # 己基类
+    "[n-Hex]": "[nHex]",
+    "[i-Hex]": "[iHex]",
+    # 环烷基
+    "[c-Prop]": "[cProp]",  # 环丙基
+    "[c-But]": "[cBut]",  # 环丁基
+    "[c-Pent]": "[cPent]",  # 环戊基
+    "[c-Hex]": "[cHex]",  # 环己基
+    "[c-Hept]": "[cHept]",  # 环庚基
+    # 移除H
+    "BH2": "B",
+    "H2B": "B",
+    "CH3": "C",
+    "H3C": "C",
+    "NH2": "N",
+    "H2N": "N",
+    "OH": "O",
+    "HO": "O",
+    "AlH2": "Al",
+    "H2Al": "Al",
+    "SiH3": "Si",
+    "H2Si": "Si",
+    "SH": "S",
+    "HS": "S",
+    "PH": "P",
+    "HP": "P",
+    "H": "[H]",
+    "[2H]": "[D]",
+    "[3H]": "[T]",
+}
+
 GREEK_LETTERS = [
     "α",
     "β",

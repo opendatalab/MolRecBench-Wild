@@ -201,7 +201,7 @@ After inference, use the Evaluator to compute accuracy on three tracks. The Eval
 **Running evaluation:**
 
 ```bash
-python evaluate/eval_SMILES.py --gt_path dataset/annotation.jsonl --pred_path results/GPT4o_20241120_chem_smiles.jsonl
+python evaluate/eval_SMILES.py --gt_path dataset/annotation.jsonl --pred_path results/Vision_Language_Models/GPT-4o/GPT4o_smiles.jsonl
 # Output:
 # SMILES Precision: 0.0797
 

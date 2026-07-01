@@ -23,6 +23,6 @@ if __name__ == "__main__":
     with jsonlines.open(pred_path) as reader:
         pred_list = list(reader)
 
-    evaluator = Evaluator(gt_list=gt_list, pred_list=pred_list, debug=True)
+    evaluator = Evaluator(gt_list=gt_list, pred_list=pred_list)
     success, correct = evaluator.evaluate_simplified_graph()
     print(f"Simplified Graph Precision: {round(correct / success, 4)}")

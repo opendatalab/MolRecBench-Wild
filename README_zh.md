@@ -212,7 +212,7 @@ python evaluate/eval_S_GRAPH.py --gt_path dataset/annotation.jsonl --pred_path r
 # 输出:
 # Simplified Graph Precision: 0.0374
 
-python evaluate/eval_GRAPH.py --gt_path dataset/annotation.jsonl --pred_path results/GPT4o_20241120_chem.jsonl
+python evaluate/eval_GRAPH.py --gt_path dataset/annotation.jsonl --pred_path results/Vision_Language_Models/GPT-4o/GPT4o_graph.jsonl
 # 输出:
 # SMILES Precision          : 0.0
 # Simplified Graph Precision: 0.0344

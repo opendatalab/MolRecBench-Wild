@@ -29,11 +29,11 @@ def load_gt_smiles(gt_path):
                     "isotopes": item["isotopes"],
                     "attach_points": item["attach_points"],
                     "coords": item["coords"],
-                    "bonds_list": item["bonds"],
+                    "bonds": item["bonds"],
                     "brackets": item["brackets"],
                 }
             )
-            smiles_gt, super_atom_map_gt = mol_graph_gt.dump_to_SMILES()
+            smiles_gt, _, _ = mol_graph_gt.dump_to_SMILES(expand=False)
             if smiles_gt == "":
                 continue
             gt_smiles[item["id"]] = smiles_gt

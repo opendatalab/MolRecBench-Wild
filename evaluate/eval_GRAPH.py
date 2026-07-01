@@ -20,17 +20,9 @@ if __name__ == "__main__":
     with jsonlines.open(args.pred_path) as reader:
         pred_list = list(reader)
 
-    evaluator = Evaluator(gt_list=gt_list, pred_list=pred_list, debug=False)
-    # success_smiles, correct_smiles = evaluator.evaluate_smiles(debug=False)
-    # print(
-    #     f"SMILES Precision          : {round(correct_smiles / success_smiles, 4)}"
-    # )
-    # success_simplified_graph, correct_simplified_graph = (
-    #     evaluator.evaluate_simplified_graph()
-    # )
-    # print(
-    #     f"Simplified Graph Precision: {round(correct_simplified_graph / success_simplified_graph, 4)}"
-    # )
+    evaluator = Evaluator(
+        gt_list=gt_list, pred_list=pred_list, infer_version="v2"
+    )
     success_graph, correct_graph = evaluator.evaluate_graph()
     print(
         f"Graph Precision           : {round(correct_graph / success_graph, 4)}"
