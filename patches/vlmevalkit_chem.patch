@@ -249,7 +249,7 @@ index 6f929df..c93d4d8 100644
 +                    api_version=api_version
 +                )]
 +            self.api_base = self.api_base_list[0]  # Default to first one for logging
-+            self.logger.info(f'Using Azure API Base(s) ({len(self.api_base_list)}): {self.api_base_list}; API Key: {self.key}')
++            self.logger.info(f'Configured {len(self.api_base_list)} Azure API endpoint(s).')
          else:
              if api_base is None:
                  if 'OPENAI_API_BASE' in os.environ and os.environ['OPENAI_API_BASE'] != '':
@@ -274,7 +274,7 @@ index 6f929df..c93d4d8 100644
 +                        self.logger.error(f'Unknown API Base: {base}. ')
 +                        raise NotImplementedError
 +                self.api_base = self.api_base_list[0]  # Default to first one for logging
-+                self.logger.info(f'Using multiple API Bases ({len(self.api_base_list)}): {self.api_base_list}; API Key: {self.key}')
++                self.logger.info(f'Configured {len(self.api_base_list)} API endpoint(s) for load balancing.')
              else:
 -                self.logger.error('Unknown API Base. ')
 -                raise NotImplementedError
@@ -287,7 +287,7 @@ index 6f929df..c93d4d8 100644
 +                    self.logger.error('Unknown API Base. ')
 +                    raise NotImplementedError
 +                self.api_base_list = [self.api_base]
-+                self.logger.info(f'Using API Base: {self.api_base}; API Key: {self.key}')
++                self.logger.info('Configured one API endpoint.')
 +            
              if os.environ.get('BOYUE', None):
 -                self.api_base = os.environ.get('BOYUE_API_BASE')
@@ -446,7 +446,7 @@ index 0000000..28fb3ac
 +            **kwargs
 +        )
 +        
-+        self.logger.info(f'Using Mathpix API with app_id: {self.app_id[:10]}...')
++        self.logger.info('Mathpix API configured.')
 +    
 +    def extract_text_from_message(self, message):
 +        """
@@ -550,7 +550,7 @@ index 0000000..28fb3ac
 +                'https://api.mathpix.com/v3/text',
 +                headers=headers,
 +                json=data,
-+                # timeout=self.timeout
++                timeout=self.timeout
 +            )
 +        except Exception as err:
 +            if self.verbose:
@@ -564,14 +564,14 @@ index 0000000..28fb3ac
 +        # Extract answer
 +        try:
 +            resp_json = response.json()
-+            smiles_extracted = self.extract_smiles_from_text(resp_json['text'])
-+            answer = smiles_extracted if smiles_extracted else resp_json['text']
-+                
-+        except Exception as err:
-+            if self.verbose:
-+                self.logger.error(f'Failed to parse response: {err}')
-+                self.logger.error(f'Response: {response.text}')
-+        
++            response_text = resp_json.get('text')
++            if not isinstance(response_text, str):
++                raise ValueError('response does not contain text')
++            smiles_extracted = self.extract_smiles_from_text(response_text)
++            answer = smiles_extracted if smiles_extracted else response_text
++        except (ValueError, KeyError, TypeError) as err:
++            self.logger.error(f'Failed to parse Mathpix response (HTTP {response.status_code}): {err}')
++            return (ret_code if ret_code != 0 else -1), 'Failed to parse Mathpix response.', response
 +        return ret_code, answer, response
 +    
 +    def generate(self, message, dataset=None):
@@ -756,7 +756,7 @@ index 22077b6..959846d 100644
 +    "GLM-4.5v": partial(
 +        GPT4V,
 +        model="glm-4.5v",
-+        # api_base="http://35.220.164.252:3888/v1",
++        # api_base="https://your-api-endpoint.example/v1",
 +        temperature=0,
 +        img_size=-1,          # 不调整图片大小，保持原图
 +        # img_detail="high",
@@ -1008,13 +1008,13 @@ index 0000000..24e0a84
 +    TYPE = 'ChemFormula'
 +
 +    DATASET_URL = {
-+        'chem': '',
++        'chem_graph': '',
 +        'chem_graph_simple': '',
 +        'chem_smiles': '',
 +    }
 +
 +    DATASET_MD5 = {
-+        'chem': None,
++        'chem_graph': None,
 +        'chem_graph_simple': None,
 +        'chem_smiles': None,
 +    }
@@ -1137,7 +1137,8 @@ index 53925e0..7985241 100644
 +        # Copy the latest main prediction file
          if prev_file is not None:
              warnings.warn(f'--reuse is set, will reuse prediction file {prev_file}')
-             os.system(f'cp {prev_file} {work_dir}')
+-            os.system(f'cp {prev_file} {work_dir}')
++            shutil.copy2(prev_file, work_dir)
 +        
 +        # Collect and merge all pkl files from all history directories
 +        all_pkl_files = []
@@ -1206,7 +1207,7 @@ new file mode 100644
 index 0000000..ad31fdc
 --- /dev/null
 +++ b/vlmeval/vlm/chemdfm_x.py
-@@ -0,0 +1,542 @@
+@@ -0,0 +1,536 @@
 +"""
 +ChemDFM-X Model Integration for VLMEvalKit
 +
@@ -1242,9 +1243,9 @@ index 0000000..ad31fdc
 +from .base import BaseModel
 +from ..smp import get_logger
 +
-+# Add ChemDFM-X to the path
-+CHEMDFM_X_ROOT = os.environ.get('CHEMDFM_X_ROOT', '/mnt/petrelfs/lilinye/githubProjects/ChemDFM-X')
-+if os.path.exists(CHEMDFM_X_ROOT) and CHEMDFM_X_ROOT not in sys.path:
++# Add a local ChemDFM-X checkout to the path when explicitly configured.
++CHEMDFM_X_ROOT = os.environ.get('CHEMDFM_X_ROOT')
++if CHEMDFM_X_ROOT and os.path.exists(CHEMDFM_X_ROOT) and CHEMDFM_X_ROOT not in sys.path:
 +    sys.path.insert(0, CHEMDFM_X_ROOT)
 +
 +logger = get_logger('ChemDFM_X')
@@ -1292,12 +1293,6 @@ index 0000000..ad31fdc
 +        if cache_dir is not None:
 +            os.environ['HUGGINGFACE_HUB_CACHE'] = cache_dir
 +            logger.info(f"Set HuggingFace cache directory to: {cache_dir}")
-+        elif 'HUGGINGFACE_HUB_CACHE' not in os.environ:
-+            # Default to the specified directory
-+            default_cache_dir = '/mnt/dhwfile/MinerU4S/lilinye/cache/hugging_face/hub'
-+            if os.path.exists(default_cache_dir):
-+                os.environ['HUGGINGFACE_HUB_CACHE'] = default_cache_dir
-+                logger.info(f"Using default HuggingFace cache directory: {default_cache_dir}")
 +        
 +        # Will be initialized lazily
 +        self.tokenizer = None
@@ -1322,7 +1317,7 @@ index 0000000..ad31fdc
 +            self._dependencies_loaded = True
 +        except ImportError as e:
 +            logger.error(f"Failed to import ChemDFM-X dependencies: {e}")
-+            logger.error(f"Please ensure CHEMDFM_X_ROOT is set correctly: {CHEMDFM_X_ROOT}")
++            logger.error("Please set CHEMDFM_X_ROOT to a local ChemDFM-X checkout.")
 +            self._dependencies_loaded = False
 +    
 +    def _load_model_if_needed(self):

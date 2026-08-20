@@ -1,331 +1,209 @@
-import json
+"""Minimal Carbon-format molecular graph used by Graph and S-Graph scoring."""
+
+from __future__ import annotations
+
+import math
+import numbers
+from copy import deepcopy
+from typing import Any, Mapping
 
 import networkx as nx
-from rdkit import Chem
 
-from evaluate.constants import EQUAL_ABBREVIATION
+from .utils import simplify_bonds
 
-from evaluate.utils import (
-    format_atoms,
-    format_bonds,
-    parse_structure_gtr1,
-    parse_structure_gtr2,
-    replace_superatom_with_mol,
-    simplify_bonds,
-    split_charges_and_symbols,
-    convert_graph_to_mol_block_v2,
-    convert_graph_to_mol_block_v2_for_vis,
-    convert_mol_block_to_graph_gtr_2_0,
-)
+
+DIRECTED_BOND_TYPES = {5, 6, 11, 13, 17, 21}
 
 
 class MolGraph:
+    """In-memory molecular graph for Carbon-format comparison."""
+
     def __init__(
         self,
-        id=None,
-        mol_block=None,
-        response=None,
-        carbon_info=None,
-        infer_version="v1",
-        attribute=None,
-        debug=False,
-    ):
+        id: str | None = None,
+        carbon_info: Mapping[str, Any] | None = None,
+        attribute: Any = None,
+        **_: Any,
+    ) -> None:
         self.id = id
-        self.infer_version = infer_version
         self.attribute = attribute
-        self.symbols = []
-        self.charges = []
-        self.radicals = []
-        self.valences = []
-        self.isotopes = []
-        self.attach_points = []
-        self.coords = []
-        self.bonds_list = []
-        self.brackets = []
-        if mol_block is not None:
-            self.load_from_mol_block(mol_block)
-        elif response is not None:
-            self.load_from_response(response, debug=debug)
-        elif carbon_info is not None:
+        self.symbols: list[str] = []
+        self.charges: list[Any] = []
+        self.radicals: list[Any] = []
+        self.valences: list[Any] = []
+        self.isotopes: list[Any] = []
+        self.attach_points: list[Any] = []
+        self.coords: list[Any] = []
+        self.bonds_list: list[list[Any]] = []
+        self.brackets: list[dict[str, Any]] = []
+        if carbon_info is not None:
             self.load_from_carbon_info(carbon_info)
 
-    def load_from_mol_block(self, mol_block):
-        (
-            self.symbols,
-            self.charges,
-            self.radicals,
-            self.valences,
-            self.isotopes,
-            self.attach_points,
-            self.coords,
-            self.bonds_list,
-            self.brackets,
-        ) = convert_mol_block_to_graph_gtr_2_0(mol_block)
-        self.symbols = [
-            EQUAL_ABBREVIATION.get(symbol, symbol) for symbol in self.symbols
-        ]
-
-    def load_from_response(self, response, correct_y=True, debug=False):
-        # 需要将 预测坐标反转， 保证与molfile中的一致
-        if self.infer_version == "v1":
-            try:
-                symbols, coords, bonds_list = parse_structure_gtr1(
-                    response=response["messages"][-1]["content"],
-                    img_path=response["images"][0]["path"],
-                    rescale_bond=False,
-                    correct_y=correct_y,
-                )
-            except Exception as e:
-                if debug:
-                    print(f"parse_structure_gtr1 ERROR: {e}")
-                symbols = []
-                coords = []
-                bonds_list = []
-            # NOTE: 这里只评估元素符号，不评估电荷，所以需要分割开
-            self.symbols, self.charges = split_charges_and_symbols(symbols)
-            self.coords = coords
-            self.bonds_list = bonds_list
-            self.radicals = [None] * len(symbols)
-            self.valences = [None] * len(symbols)
-            self.attach_points = [None] * len(symbols)
-            self.isotopes = [None] * len(symbols)
-            self.brackets = []
-        elif self.infer_version == "v2":
-            try:
-                (
-                    self.symbols,
-                    self.charges,
-                    self.radicals,
-                    self.valences,
-                    self.isotopes,
-                    self.attach_points,
-                    self.coords,
-                    self.bonds_list,
-                    self.brackets,
-                ) = parse_structure_gtr2(
-                    response=response["messages"][-1]["content"],
-                    img_path=response["images"][0]["path"],
-                    correct_y=correct_y,
-                )
-            except Exception as e:
-                if debug:
-                    print(f"parse_structure_gtr2 ERROR: {e}")
-                self.symbols = []
-                self.charges = []
-                self.radicals = []
-                self.valences = []
-                self.isotopes = []
-                self.attach_points = []
-                self.coords = []
-                self.bonds_list = []
-                self.brackets = []
-        # 替换等效的缩写
-        self.symbols = [
-            EQUAL_ABBREVIATION.get(symbol, symbol) for symbol in self.symbols
-        ]
-
-    def load_from_carbon_info(self, carbon_info):
-        self.symbols = carbon_info["symbols"]
-        self.charges = carbon_info["charges"]
-        self.radicals = carbon_info["radicals"]
-        self.valences = carbon_info["valences"]
-        self.isotopes = carbon_info["isotopes"]
-        self.attach_points = carbon_info.get(
-            "attach_points", [None] * len(carbon_info["symbols"])
-        )
-        self.coords = carbon_info["coords"]
-        self.bonds_list = carbon_info["bonds"]
-        self.brackets = carbon_info["brackets"]
-
-    def dump_to_simplify_graph(self):
-        # TODO: 创建一个有向图
-        graph = nx.DiGraph()
-        # TODO: 添加节点信息
-        for i in range(len(self.symbols)):
-            # 需要确保没有特殊值的时候保持为 None
-            symbol = (
-                self.symbols[i][1:-1]
-                if len(self.symbols[i]) > 0
-                and self.symbols[i][0] == "["
-                and self.symbols[i][-1] == "]"
-                else self.symbols[i]
+    @staticmethod
+    def _attribute_values(
+        carbon_info: Mapping[str, Any],
+        name: str,
+        count: int,
+        *,
+        required: bool,
+    ) -> list[Any]:
+        value = carbon_info.get(name)
+        if value is None:
+            if required and name not in carbon_info:
+                raise ValueError(f"Carbon graph is missing field {name!r}")
+            return [None] * count
+        if not isinstance(value, list) or len(value) != count:
+            raise ValueError(
+                f"Carbon field {name!r} must have {count} entries"
             )
-            graph.add_node(i, symbol=symbol)
-        # TODO: 需要先简化化学键
-        bond_simplified_list = simplify_bonds(self.bonds_list)
-        # TODO: 添加边信息
-        for i, j, bt in bond_simplified_list:
-            # 有方向的键
-            if bt in [5, 6, 11, 13, 17, 21]:
-                graph.add_edge(i, j, bond=bt)
-            else:
-                graph.add_edge(i, j, bond=bt)
-                graph.add_edge(j, i, bond=bt)
+        return deepcopy(value)
+
+    def load_from_carbon_info(
+        self, carbon_info: Mapping[str, Any]
+    ) -> None:
+        symbols = carbon_info.get("symbols")
+        bonds = carbon_info.get("bonds")
+        if not isinstance(symbols, list) or not isinstance(bonds, list):
+            raise ValueError(
+                "Carbon graph requires list fields 'symbols' and 'bonds'"
+            )
+        self.id = carbon_info.get("id", self.id)
+        if any(not isinstance(symbol, str) or not symbol for symbol in symbols):
+            raise ValueError("Every Carbon symbol must be a non-empty string")
+        self.symbols = deepcopy(symbols)
+        count = len(self.symbols)
+        self.charges = self._attribute_values(
+            carbon_info, "charges", count, required=True
+        )
+        self.radicals = self._attribute_values(
+            carbon_info, "radicals", count, required=True
+        )
+        self.valences = self._attribute_values(
+            carbon_info, "valences", count, required=True
+        )
+        self.isotopes = self._attribute_values(
+            carbon_info, "isotopes", count, required=True
+        )
+        self.attach_points = self._attribute_values(
+            carbon_info,
+            "attach_points",
+            count,
+            required=False,
+        )
+        coords = carbon_info.get("coords")
+        self.coords = (
+            deepcopy(coords)
+            if isinstance(coords, list)
+            else [[0.0, 0.0] for _ in range(count)]
+        )
+        validated_bonds: list[list[int]] = []
+        for raw_bond in bonds:
+            if not isinstance(raw_bond, list) or len(raw_bond) != 3:
+                raise ValueError(
+                    f"Every Carbon bond must contain three integers: "
+                    f"{raw_bond!r}"
+                )
+            normalized: list[int] = []
+            for value in raw_bond:
+                if (
+                    isinstance(value, bool)
+                    or not isinstance(value, numbers.Real)
+                    or not math.isfinite(float(value))
+                    or float(value) != int(value)
+                ):
+                    raise ValueError(
+                        f"Every Carbon bond must contain integer-valued "
+                        f"numbers: {raw_bond!r}"
+                    )
+                normalized.append(int(value))
+            atom_1, atom_2, bond_type = normalized
+            if not (0 <= atom_1 < count and 0 <= atom_2 < count):
+                raise ValueError(
+                    f"Carbon bond endpoint is out of range: {raw_bond!r}"
+                )
+            if not 1 <= bond_type <= 23:
+                raise ValueError(
+                    f"Carbon bond type is out of range: {raw_bond!r}"
+                )
+            validated_bonds.append([atom_1, atom_2, bond_type])
+        self.bonds_list = validated_bonds
+        brackets = carbon_info.get("brackets")
+        if not isinstance(brackets, list):
+            raise ValueError("Carbon field 'brackets' must be a list")
+        self.brackets = (
+            deepcopy(brackets) if isinstance(brackets, list) else []
+        )
+
+    @staticmethod
+    def _symbol(symbol: str) -> str:
+        if symbol.startswith("[") and symbol.endswith("]"):
+            return symbol[1:-1]
+        return symbol
+
+    def dump_to_simplify_graph(self) -> nx.DiGraph:
+        graph = nx.DiGraph()
+        for index, symbol in enumerate(self.symbols):
+            graph.add_node(index, symbol=self._symbol(symbol))
+        for atom_1, atom_2, bond_type in simplify_bonds(
+            self.bonds_list
+        ):
+            graph.add_edge(atom_1, atom_2, bond=bond_type)
+            if bond_type not in DIRECTED_BOND_TYPES:
+                graph.add_edge(atom_2, atom_1, bond=bond_type)
         return graph
 
-    def dump_to_graph(self):
-        # 创建一个有向图
+    def dump_to_graph(self) -> nx.DiGraph:
         graph = nx.DiGraph()
-        for i in range(len(self.symbols)):
-            # 需要确保没有特殊值的时候保持为 None
-            symbol = (
-                self.symbols[i][1:-1]
-                if len(self.symbols[i]) > 0
-                and self.symbols[i][0] == "["
-                and self.symbols[i][-1] == "]"
-                else self.symbols[i]
-            )
+        for index, symbol in enumerate(self.symbols):
             graph.add_node(
-                i,
-                symbol=symbol,
-                charge=self.charges[i],
-                radical=self.radicals[i],
-                valence=self.valences[i],
-                isotope=self.isotopes[i],
-                attach_point=self.attach_points[i],
+                index,
+                symbol=self._symbol(symbol),
+                charge=self.charges[index],
+                radical=self.radicals[index],
+                valence=self.valences[index],
+                isotope=self.isotopes[index],
+                attach_point=self.attach_points[index],
             )
-        for i, j, bt in self.bonds_list:
-            if bt in [5, 6, 11, 13, 17, 21]:
-                graph.add_edge(i, j, bond=bt)
-            else:
-                graph.add_edge(i, j, bond=bt)
-                graph.add_edge(j, i, bond=bt)
+        for atom_1, atom_2, bond_type in self.bonds_list:
+            graph.add_edge(atom_1, atom_2, bond=bond_type)
+            if bond_type not in DIRECTED_BOND_TYPES:
+                graph.add_edge(atom_2, atom_1, bond=bond_type)
         return graph
-
-    def dump_to_mol_block(self, super_atom_map=None, flip_y=False, debug=False):
-        if super_atom_map is None:
-            super_atom_map = {}
-        # try:
-        mol_block = convert_graph_to_mol_block_v2_for_vis(
-            self.symbols,
-            self.charges,
-            self.radicals,
-            self.valences,
-            self.isotopes,
-            self.attach_points,
-            self.coords,
-            self.bonds_list,
-            self.brackets,
-            flip_y=flip_y,
-            debug=debug,
-        )
-
-        return mol_block
 
     def dump_to_SMILES(
         self,
-        expand=True,
-        super_atom_map=None,
-        super_index_init=40,
-        kekuleSmiles=True,
-        canonical=True,
-        debug=False,
-    ):
-        smiles = ""
-        missing_abbrs = {}
-        if super_atom_map is None:
-            super_atom_map = {}
-        mol_block, super_atom_map = convert_graph_to_mol_block_v2(
-            self.symbols,
-            self.charges,
-            self.radicals,
-            self.valences,
-            self.isotopes,
-            self.attach_points,
-            self.coords,
-            simplify_bonds(self.bonds_list),
-            self.brackets,
-            super_atom_map=super_atom_map,
-            super_index_init=super_index_init,
-        )
-        # sanitize 设置为False可以提高GT的有效数量
-        mol = Chem.MolFromMolBlock(mol_block, sanitize=False)
-        if mol is None:
-            if debug:
-                print(f"mol_block:{mol_block}")
-            return smiles, super_atom_map, missing_abbrs
-        # kekuleSmiles 设置为True可以提高GT的有效数量
-        if kekuleSmiles:
-            try:
-                smiles = Chem.MolToSmiles(
-                    mol, canonical=canonical, kekuleSmiles=True
-                )
-            except Exception as e:
-                smiles = Chem.MolToSmiles(
-                    mol, canonical=canonical, kekuleSmiles=False
-                )
-        else:
-            smiles = Chem.MolToSmiles(
-                mol, canonical=canonical, kekuleSmiles=False
-            )
-        # 还原超原子
-        if debug:
-            print("还原超原子符号")
-            print(f"super_atom_map:{super_atom_map}")
-            print(f"smiles:{smiles}")
-        for symbol, idx in super_atom_map.items():
-            if symbol.startswith("[") and symbol.endswith("]"):
-                symbol = symbol[1:-1]
-            smiles = smiles.replace(f"{idx}Tc", f"{symbol}")
-        if expand:
-            smiles, missing_abbrs = replace_superatom_with_mol(
-                smiles,
-                canonical=canonical,
-                kekuleSmiles=kekuleSmiles,
-                report_missing_abbr=False,
-            )
-        return smiles, super_atom_map, missing_abbrs
+        expand: bool = True,
+        super_atom_map: dict[str, str] | None = None,
+        **_: Any,
+    ) -> tuple[str, dict[str, str], list[dict[str, Any]]]:
+        """Convert this Carbon-format graph to normalized SMILES."""
 
-    def dump_to_dict(self, simplify=False):
+        from .utils import carbon_to_smiles, replace_superatom_with_mol
+
+        mapping = dict(super_atom_map or {})
+        smiles = carbon_to_smiles(self.dump_to_carbon())
+        missing: list[dict[str, Any]] = []
+        if expand:
+            smiles, missing = replace_superatom_with_mol(
+                smiles, report_missing_abbr=False
+            )
+        return smiles, mapping, missing
+
+    def dump_to_carbon(self, simplify: bool = False) -> dict[str, Any]:
         if simplify:
             return {
-                "symbols": self.symbols,
-                "coords": self.coords,
-                "bonds_list": simplify_bonds(self.bonds_list),
+                "symbols": deepcopy(self.symbols),
+                "coords": deepcopy(self.coords),
+                "bonds": simplify_bonds(self.bonds_list),
             }
-        else:
-            return {
-                "symbols": self.symbols,
-                "charges": self.charges,
-                "radicals": self.radicals,
-                "valences": self.valences,
-                "isotopes": self.isotopes,
-                "attach_points": self.attach_points,
-                "coords": self.coords,
-                "bonds_list": self.bonds_list,
-                "brackets": self.brackets,
-            }
-
-    def dump_to_response(self):
-        import textwrap
-
-        response_template_qwen25vl = textwrap.dedent("""
-        ```json
-        {list_of_atoms_and_bonds}
-        ```
-        ```json
-        {{
-            "smiles": "{smiles}"
-        }}
-        ```
-        """)
-        # 整理原子以及原子状态信息
-        atoms = format_atoms(
-            self.symbols,
-            self.coords,
-            [300, 300],
-            flip_y=True,
-            charges=self.charges,
-            valences=self.valences,
-            isotopes=self.isotopes,
-            radicals=self.radicals,
-            attach_points=self.attach_points,
-        )
-        atoms_bonds = format_bonds(self.bonds_list, atoms)
-        tight_atoms_bonds = json.dumps(atoms_bonds).replace(" ", "")
-        response_template_qwen25vl = response_template_qwen25vl.format(
-            list_of_atoms_and_bonds=tight_atoms_bonds,
-            smiles="N/A",
-        )
-
-        return response_template_qwen25vl
+        return {
+            "symbols": deepcopy(self.symbols),
+            "charges": deepcopy(self.charges),
+            "radicals": deepcopy(self.radicals),
+            "valences": deepcopy(self.valences),
+            "isotopes": deepcopy(self.isotopes),
+            "attach_points": deepcopy(self.attach_points),
+            "coords": deepcopy(self.coords),
+            "bonds": deepcopy(self.bonds_list),
+            "brackets": deepcopy(self.brackets),
+        }
