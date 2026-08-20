@@ -10,8 +10,10 @@
 
 <p align="center">
   <a href="https://arxiv.org/abs/2605.05832"><img src="https://img.shields.io/badge/arXiv-2605.05832-b31b1b.svg" alt="arXiv"></a>
+  <a href="https://openaccess.thecvf.com/content/CVPR2026F/html/Yang_MolRecBench-Wild_A_Real-World_Benchmark_for_Optical_Chemical_Structure_Recognition_CVPRF_2026_paper.html"><img src="https://img.shields.io/badge/CVPR%202026-Open%20Access-blue.svg" alt="CVPR 2026 Open Access"></a>
+  <a href="https://arxiv.org/abs/2608.03525"><img src="https://img.shields.io/badge/Technical%20Report-arXiv%202608.03525-b31b1b.svg" alt="MinerU.Chem Technical Report"></a>
   <a href="https://huggingface.co/datasets/opendatalab/MolRecBench-Wild"><img src="https://img.shields.io/badge/🤗%20Dataset-MolRecBench--Wild-blue" alt="Dataset"></a>
-  <a href="LICENSE"><img src="https://img.shields.io/badge/License-Apache%202.0-green.svg" alt="License"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/Code%20License-Apache%202.0-green.svg" alt="Code License"></a>
 
 </p>
 
@@ -25,18 +27,38 @@
 
 ## 🔥 News
 
-- 🚀 [04/07/2026] Our paper is accepted by **CVPRF 2026**!
+- 🚀 [2026-05-07] MolRecBench-Wild v1 was released on [arXiv](https://arxiv.org/abs/2605.05832).
 
 ## 📊 Dataset Statistics
 
-| Feature | MolRecBench-Wild | Traditional Benchmarks (e.g., USPTO, Staker) |
-| :--- | :--- | :--- |
-| **Source** | Academic Articles | Patents / Synthetic |
-| **Sample Count** | 5029 | Varies (usually larger but simpler) |
-| **Visual Difficulty Labels** | 18 Categories | < 10 Categories |
-| **Chemical Difficulty Labels** | 19 Categories (MOSAIC subset) | < 3 Categories |
-| **Ground Truth** | CARBON, Graph, SMILES | SMILES, MolFile |
-| **Complex Structure Support** | Non-standard bonds, icon groups, mixed valences | Standard structures only |
+| Item | Current repository release |
+| :--- | :--- |
+| **Release** | `2026-08-19` |
+| **Source** | Molecular structure figures from academic articles |
+| **Sample count** | 5,024 |
+| **Ground truth** | CARBON molecular graph annotations |
+| **Difficulty metadata** | `hardcase_label` (50 distinct values in the `2026-08-19` release) |
+| **Evaluation subsets** | A: 1,987; B: 1,976; C: 1,061 |
+| **Evaluation tracks** | SMILES, Simplified Graph, and Graph |
+
+The arXiv v1 paper describes an earlier 5,029-sample snapshot. This repository
+uses the 5,024-sample `2026-08-19` release as its authoritative ground truth.
+
+## Repository Layout
+
+```text
+.
+├── assets/                  README images
+├── evaluate/                Evaluation package (`python -m evaluate`)
+├── patches/                 Pinned VLMEvalKit integration patch
+├── prompts/                 Track prompts and visual examples
+├── results/                 Bundled prediction JSONL files
+│   └── manifest.json         Integrity metadata for bundled results
+└── scripts/                 Setup, conversion, validation, and release tools
+```
+
+`dataset/`, `LMUData/`, and `VLMEvalKit/` are generated at runtime and are not
+version-controlled.
 
 
 ## CARBON Notation
@@ -93,28 +115,35 @@
 
 ## ⚡ Quick Start
 
-### Step 1:  Setup Environment
+### Step 1: Setup Environment
 
 ```bash
-git clone https://github.com/your-username/MolRecBench-Wild.git
+git clone https://github.com/opendatalab/MolRecBench-Wild.git
 cd MolRecBench-Wild
 
-# Install dependencies
+# Create and activate the environment, then install dependencies
 conda create -n molrec python=3.10 -y
-pip install -r requirements.txt
+conda activate molrec
+python -m pip install -r requirements.txt
 ```
 
 ### Step 2: Setup VLMEvalKit
 
-We use [VLMEvalKit](https://github.com/open-compass/VLMEvalKit) as the inference backend, with minimal patches to add chemistry-specific model adapters and datasets. Our patches are provided in [`patches/`](./patches/) for full transparency — we do not redistribute VLMEvalKit itself.
+We use [VLMEvalKit](https://github.com/open-compass/VLMEvalKit) as the inference
+backend. The setup script checks out the pinned upstream commit
+`b9ff66c970449a8106c02570102bcfb2fb3df462` and applies the chemistry integration
+patch in [`patches/`](patches/). VLMEvalKit itself is obtained from upstream and
+is not redistributed in this repository.
 
 Run the one-click setup script:
 
 ```bash
-bash setup_vlmevalkit.sh
+bash scripts/setup_vlmevalkit.sh
 ```
 
-After setup, create a file named ".env" in the VLMEvalKit directory and configure your API keys:
+For API-backed models, add the credentials required by the selected adapter to
+`VLMEvalKit/.env`. Local model adapters do not require the OpenAI variables
+shown below. Never commit this file.
 
 ```bash
 # VLMEvalKit/.env
@@ -127,19 +156,26 @@ OPENAI_API_KEY=your-api-key
 Download the dataset from HuggingFace and convert it to VLMEvalKit TSV format in one step:
 
 ```bash
-# Defaulit: download all tracks data
-python download_and_convert.py --prompt all             # generate TSV for all three tracks
+# Download the dataset and generate TSV files for all three tracks
+python scripts/download_and_convert_dataset.py --prompt all
 
 # Download dataset and convert to SMILES track TSV
-python download_and_convert.py --prompt smiles
+python scripts/download_and_convert_dataset.py --prompt smiles
 
-python download_and_convert.py --prompt smiles --skip-download  # skip download if dataset/ already exists
+# Reuse a previously downloaded dataset
+python scripts/download_and_convert_dataset.py --prompt smiles --skip-download
 ```
 
 The script will:
+
 1. Download images to `./dataset/images/` and save ground truth to `./dataset/annotation.jsonl`
 2. Generate TSV files to `./LMUData/`
 3. Automatically register the `LMUData` path in `VLMEvalKit/.env` so VLMEvalKit can find the TSV files
+
+The downloader is pinned to the immutable Hugging Face `2026-08-19` release revision
+`e8999662272ee5a9fd565e5dabf28feb12962dee`. It validates the 5,024 IDs,
+required annotation fields, evaluation-subset counts, atom-field lengths, and
+local image presence before conversion.
 
 ### Step 4: Run Inference
 
@@ -147,23 +183,23 @@ The script will:
 cd VLMEvalKit
 
 # Run a single task (SMILES)
-python run.py --data smiles --model GPT4o_20241120
+python run.py --data chem_smiles --model GPT4o_20241120
 
 # Run all three tasks at once (SMILES, Simplified Graph, Graph)
-python run.py --data smiles simple_graph carbon --model GPT4o_20241120
+python run.py --data chem_smiles chem_graph_simple chem_graph --model GPT4o_20241120
 
 # Increase parallel API calls for faster inference
-python run.py --data smiles --model GPT4o_20241120 --api-nproc 32
+python run.py --data chem_smiles --model GPT4o_20241120 --api-nproc 32
 
 # Resume an interrupted run (skip already completed samples)
-python run.py --data smiles --model GPT4o_20241120 --reuse
+python run.py --data chem_smiles --model GPT4o_20241120 --reuse
 ```
 
 **Key arguments:**
 
 | Argument | Description |
 | :--- | :--- |
-| `--data` | Recognition task to run: SMILES, Simplified Graph, or Graph |
+| `--data` | Dataset ID to run: `chem_smiles`, `chem_graph_simple`, or `chem_graph` |
 | `--model` | Model name as defined in `vlmeval/config.py` |
 | `--work-dir` | Output directory (default: `./outputs`) |
 | `--api-nproc` | Number of parallel API calls (default: 4, increase for faster inference) |
@@ -173,17 +209,53 @@ Prediction results will be saved to `VLMEvalKit/outputs/<model_name>/`.
 
 **Testing with your own model:**
 
-To evaluate a custom model, you need to implement a model wrapper in VLMEvalKit. At minimum, create a class with a `generate_inner(msgs, dataset=None)` method that takes a multi-modal message list and returns the model's prediction string. Then register it in `vlmeval/config.py`. For details, see the [VLMEvalKit Development Guide](https://github.com/open-compass/VLMEvalKit/blob/main/docs/en/Development.md#implement-a-new-model).
+To evaluate a custom model, implement a VLMEvalKit model wrapper. At minimum,
+create a class with a `generate_inner(msgs, dataset=None)` method that accepts a
+multimodal message list and returns the prediction string, then register it in
+`vlmeval/config.py`. See the [development guide for the pinned upstream
+commit](https://github.com/open-compass/VLMEvalKit/blob/b9ff66c970449a8106c02570102bcfb2fb3df462/docs/en/Development.md#implement-a-new-model).
 
-### Step 5: Convert Results
+### Step 5: Prepare Prediction JSONL
 
-VLMEvalKit outputs an XLSX file per run. Convert it to the JSONL format expected by the Evaluator:
+Return to the repository root after inference:
 
 ```bash
-# Convert XLSX → Evaluator JSONL
-python convert_result.py \
-    -i "VLMEvalKit/outputs/GPT4o_20241120/T20260413_G/GPT4o_20241120_chem_smiles.xlsx" \
-    -o "results/GPT4o_20241120_chem_smiles.jsonl"
+cd ..
+```
+
+The evaluator consumes one JSON object per line. Every prediction must use the
+exact `id` from `dataset/annotation.jsonl`. A SMILES prediction requires at
+least `id` and `smiles`; graph predictions use the CARBON fields shown above.
+
+Convert a VLMEvalKit workbook by selecting the track explicitly:
+
+```bash
+python scripts/convert_result.py \
+  --input "VLMEvalKit/outputs/<model>/<run-id>/<prediction>.xlsx" \
+  --output "local_results/<model>_graph.jsonl" \
+  --track graph \
+  --strict-predictions \
+  --errors-output "/tmp/<model>_graph_errors.jsonl"
+```
+
+The dataset-to-track mapping is `chem_smiles` → `smiles`,
+`chem_graph_simple` → `s_graph`, and `chem_graph` → `graph`. Text filename IDs,
+including the current `.jpg` IDs, keep their values by default; surrounding
+whitespace is stripped and numeric cells are normalized. Use `--id-suffix
+.jpg` only for a legacy workbook whose IDs omit that suffix. A workbook with
+multiple sheets must be resolved with `--sheet NAME` or the explicit
+`--all-sheets` merge mode; IDs must be unique across all merged sheets. For
+historical CARBON attachment-point predictions, `atom1` is the retained atom
+and `atom2` is the dummy atom removed during conversion. Malformed predictions
+retain their IDs as empty predictions; `--strict-predictions` prevents the
+output from being replaced when any such error is found.
+
+To enforce exact 5,024-ID coverage for a directory of custom JSONL files, run:
+
+```bash
+python scripts/validate_results.py \
+  --results local_results \
+  --write-manifest /tmp/local_results_manifest.json
 ```
 
 ### Step 6: Evaluation
@@ -194,71 +266,125 @@ After inference, use the Evaluator to compute accuracy on three tracks. The Eval
 
 | Metric | What it compares | Description |
 | :--- | :--- | :--- |
-| **SMILES Accuracy** | SMILES strings | Converts both GT and prediction to SMILES, then compares canonical SMILES string. |
-| **Simplified Graph Accuracy** | Atom symbols + bond types | Graph isomorphism on simplified molecular graph (ignoring charges, radicals, valences, isotopes, attachment point, brackets). |
-| **Graph Accuracy** | CARBON | Graph isomorphism on the complete molecular graph including all attributes. |
+| **SMILES Accuracy** | Canonical SMILES | Scores only SMILES-eligible GT records after CARBON conversion and abbreviation expansion. It compares exact canonical SMILES, ignoring double-bond cis/trans by default while retaining atom chirality. |
+| **Simplified Graph Accuracy** | Symbols + simplified bond types | Directed graph isomorphism after symbol and bond simplification. Chemical atom attributes, attachment points, brackets, and coordinates are ignored. |
+| **Graph Accuracy** | CARBON chemical attributes | Directed graph isomorphism over symbols, charge, radical, valence, isotope, attachment points, bonds, and bracket alias/atom membership. Coordinates and bracket display rectangles are not compared. |
 
 **Running evaluation:**
 
 ```bash
-python evaluate/eval_SMILES.py --gt_path dataset/annotation.jsonl --pred_path results/Vision_Language_Models/GPT-4o/GPT4o_smiles.jsonl
-# Output:
-# SMILES Precision: 0.0797
+python -m evaluate smiles \
+  --gt-path dataset/annotation.jsonl \
+  --pred-path results/MLLM/GPT-5.6-sol/GPT-5.6-sol_smiles.jsonl \
+  --output-csv eval_results/GPT-5.6-sol/GPT-5.6-sol_smiles_eval.csv \
+  --missing-abbreviations-output vis_results/miss_abbr.csv
+# Current result: 1,791 / 2,392 eligible GT = 0.7487458194
 
-python evaluate/eval_S_GRAPH.py --gt_path dataset/annotation.jsonl --pred_path results/GPT4o_20241120_chem_graph_simple.jsonl
-# Output:
-# Simplified Graph Precision: 0.0374
+python -m evaluate s_graph \
+  --gt-path dataset/annotation.jsonl \
+  --pred-path results/MLLM/GPT-5.6-sol/GPT-5.6-sol_graph_simple.jsonl
+# Current result: 1,828 / 5,024 GT = 0.3638535032
 
-python evaluate/eval_GRAPH.py --gt_path dataset/annotation.jsonl --pred_path results/GPT4o_20241120_chem.jsonl
-# Output:
-# SMILES Precision          : 0.0
-# Simplified Graph Precision: 0.0344
-# Graph Precision           : 0.0298
+python -m evaluate graph \
+  --gt-path dataset/annotation.jsonl \
+  --pred-path results/MLLM/GPT-5.6-sol/GPT-5.6-sol_graph.jsonl
+# Current result: 1,636 / 5,024 GT = 0.3256369427
 ```
+
+SMILES evaluation ignores double-bond cis/trans slash directions by default,
+matching the benchmark protocol. Atom chirality (`@`/`@@`) is always compared.
+Use `--preserve-cistrans` to compare both forms of stereochemistry.
+
+Evaluation requires complete, unique prediction-ID coverage by default.
+Missing IDs, IDs outside the full GT, duplicate IDs, malformed rows, and rows
+without a string ID stop the evaluation. When using `--limit` or `--split`,
+predictions for non-selected GT records are allowed, but every selected GT ID
+must be present. Use `--allow-coverage-mismatch` only for intentionally partial
+ID-coverage diagnostics; malformed JSON remains invalid for Graph tracks.
+
+To verify that repository result files cover all 5,024 GT IDs, run:
+
+```bash
+python scripts/validate_results.py
+```
+
+To evaluate every supported JSONL below `results/` and write the consolidated
+paper-style Excel table, run:
+
+```bash
+python -m evaluate.eval_all --timeout 0
+# Default output: results/evaluation_results.xlsx
+```
+
+`--timeout 0` disables the per-record graph-isomorphism timeout and is the
+setting used for the table below; it can take longer but avoids small
+platform-dependent timeout differences. The default timeout is five seconds.
+Use `--output`, `--include`, or `--exclude` to customize the output path or
+select files. `--limit` and `--max-files` are available for smoke tests.
+Batch evaluation applies the same strict ID-coverage policy; pass
+`--allow-coverage-mismatch` only when partial files are expected.
+
+Each record in `dataset/annotation.jsonl` contains an `evaluation_subset`
+field. The paper-table mapping is:
+
+- A: no specified chemical-semantic property difficulty labels and relatively
+  few visual difficulty labels (1,987 records)
+- B: no specified chemical-semantic property difficulty labels but more visual
+  difficulty labels (1,976 records)
+- C: contains specified chemical-semantic property difficulty labels (1,061 records)
+
+The stored `evaluation_subset` values are the literal strings `A`, `B`, and
+`C`, following the definitions in
+[MinerU.Chem](https://arxiv.org/abs/2608.03525).
 
 ## Benchmark Results
 
-We evaluated 18 mainstream models(The inference results are saved in the `results` folder), revealing that existing methods suffer significant performance drops in real-world scenarios.
-_Underlined values indicate the best results within each class, and bold values represent the overall best results across all classes._
+The repository contains 34 prediction JSONL files covering 17 systems. The
+values below are exact-match accuracies (%) recomputed with the current
+evaluator against release `2026-08-19`, using `--timeout 0`. The SMILES denominators are
+2,392 for Full, 1,219 for A, 875 for B, and 298 for C. The Graph denominators
+are 5,024 for Full, 1,987 for A, 1,976 for B, and 1,061 for C. A dash means that
+the corresponding prediction file is not included. These values are not
+directly comparable to the earlier 5,029-sample results in arXiv v1.
 
-| Method | SMILES | Simplified Graph | Graph |
-|--------|--------|------------------|-------|
-| **SMILES-based Expert Models** |||| 
-| OCSU |6.06 | - | - |
-| DECIMERv2.2 | 22.84 | - | - |
-| **Graph-based Expert Models** |||| 
-| MolGrapher | 20.33 | 22.81 | - |
-| MolNexTR | 40.9 | 34.42 | - |
-| MolScribe | 41.05 | 34.74 | - |
-| GTR-Mol-VLM | 40.43 | 35.22 | - |
-| **Vision Language Models** |||| 
-| GPT-4o | 7.94 | 3.74 | 2.94 |
-| Qwen-VL-Max |6.95 | 5.83 | 3.66 |
-| InternVL3.5 | 25.6 | 6.88 | 3.08 |
-| ChemVLM† | 4.79 | - | - |
-| ChemDFM-X† | 9.75 | - | - |
-| **Vision Reasoning Models** |||| 
-| GPT-5 | 19.68 | 10.0 | 8.19 |
-| Seed1.6-Thinking | 15.6 | 7.14 | 4.61 |
-| Intern-S1 | 18.98 | 6.62 | 3.46 |
-| Gemini 2.5 Pro | 30.06 | 15.67 | 13.04 |
-| GLM-4.5V | 12.13 |7.89 | 4.26 |
-| **Tools** |||| 
-| Mathpix | 27.88 | - | - |
-| Logics-Parsing | 15.47 | - | - |
+| Method | Full SMILES | Full Graph | A SMILES | A Graph | B SMILES | B Graph | C SMILES | C Graph |
+| :--- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| OCSU | 11.41 | — | 14.60 | — | 9.03 | — | 5.37 | — |
+| DECIMER v2.2 | 41.43 | — | 60.21 | — | 22.97 | — | 18.79 | — |
+| MolGrapher | 34.78 | — | 47.01 | — | 27.77 | — | 5.37 | — |
+| MolNexTR | 62.50 | — | 76.78 | — | 52.11 | — | 34.56 | — |
+| MolScribe | 62.29 | — | 77.28 | — | 50.97 | — | 34.23 | — |
+| ChemDFM-X | 19.06 | — | 25.18 | — | 13.94 | — | 9.06 | — |
+| ChemVLM | 8.03 | — | 11.07 | — | 5.94 | — | 1.68 | — |
+| Logic-Parsing | 25.84 | — | 33.39 | — | 21.49 | — | 7.72 | — |
+| Mathpix | 47.32 | — | 58.65 | — | 41.03 | — | 19.46 | — |
+| InternVL3.5 | 39.80 | 3.01 | 46.92 | 4.73 | 34.86 | 2.13 | 25.17 | 1.41 |
+| GLM-4.5V | 20.28 | 4.20 | 24.53 | 7.15 | 18.17 | 2.94 | 9.06 | 1.04 |
+| Intern-S1 | 30.02 | 3.46 | 36.10 | 5.89 | 25.26 | 2.13 | 19.13 | 1.41 |
+| Seed1.6-Thinking | 24.83 | 4.62 | 30.19 | 7.15 | 19.77 | 3.44 | 17.79 | 2.07 |
+| Claude-opus-4-8 | 65.47 | 14.29 | 72.85 | 21.24 | 61.49 | 11.44 | 46.98 | 6.60 |
+| Gemini-3.5-flash-thinking | 66.85 | 37.56 | 72.03 | 50.73 | 62.97 | 31.93 | 57.05 | 23.37 |
+| GPT-5.6-Sol | 74.87 | 32.56 | 81.95 | 44.44 | 70.06 | 28.14 | 60.07 | 18.57 |
+| **MinerU.Chem (GTR-VL-1.4.13)** | **93.02** | **79.66** | **98.28** | **92.15** | **93.49** | **80.11** | **70.13** | **55.42** |
 
-Please refer to the paper for complete results.
+## Citation
 
-
-<!-- ## Citation
-
-If you use MolRecBench-Wild, the MOSAIC framework, or the CARBON notation in your research, please cite our paper:
+If you use MolRecBench-Wild, the MOSAIC framework, or the CARBON notation in your research, please cite our [CVPR 2026 paper](https://openaccess.thecvf.com/content/CVPR2026F/html/Yang_MolRecBench-Wild_A_Real-World_Benchmark_for_Optical_Chemical_Structure_Recognition_CVPRF_2026_paper.html) (also available on [arXiv](https://arxiv.org/abs/2605.05832)). The accompanying [MinerU.Chem technical report](https://arxiv.org/abs/2608.03525) describes the updated benchmark release and system results:
 
 ```bibtex
-@inproceedings{anonymous2026molrecbench,
+@inproceedings{yang2026molrecbench,
   title={MolRecBench-Wild: A Real-World Benchmark for Optical Chemical Structure Recognition},
-  author={Anonymous CVPR Submission},
-  booktitle={Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR)},
+  author={Yang, Haote and Wang, Hui and Zhu, Chen and Wang, Jingchao and Li, Linye and Lai, Hongbin and Ao, Huijie and Lyu, Yongxuan and Wu, Jiang and Sun, Jiaxing and Chen, Lua and Cao, Yuanyuan and Zhang, Ruijie and Lu, Shengxin and Wu, Lijun and Wang, Bin and He, Conghui},
+  booktitle={Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition},
   year={2026}
 }
-``` -->
+```
+
+## License
+
+Original project source code is licensed under the Apache License 2.0; see
+[`LICENSE`](LICENSE). This license does not automatically
+cover dataset images or annotations, model weights, prediction outputs,
+third-party software, or third-party assets. See
+[`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md) and the applicable upstream
+terms before use or redistribution.

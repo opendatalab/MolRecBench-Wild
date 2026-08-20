@@ -1,0 +1,179 @@
+{
+  "schema_version": 1,
+  "description": "Integrity metadata for bundled prediction files.",
+  "dataset_release_id": "2026-08-19",
+  "dataset_sorted_ids_sha256": "1460946d9a7c94e9baab953b180f6a88d15af22e0deacfc4db8a091a88921b06",
+  "result_file_count": 34,
+  "files": [
+    {
+      "path": "results/Expert_Models/ChemDFM-X/ChemDFM-X_smiles.jsonl",
+      "record_count": 5024,
+      "sha256": "8c2118de682b6d38c51e6dfa3cfe39c1f6d274d3b9185cbdd6f90c4c2ef88949"
+    },
+    {
+      "path": "results/Expert_Models/ChemVLM/ChemVLM_smiles.jsonl",
+      "record_count": 5024,
+      "sha256": "6824828627e485bfd384e9ea02fb385c067945a13c28c320dbdb9a18abfc02f3"
+    },
+    {
+      "path": "results/Expert_Models/DECIMERv2.2/DECIMERv2.2_smiles.jsonl",
+      "record_count": 5024,
+      "sha256": "1bb03b823c412b229f7a6a7980486caa87ec3b376c0c05c38d56f1607c2157c1"
+    },
+    {
+      "path": "results/Expert_Models/MolGrapher/Molgrapher_graph_simple.jsonl",
+      "record_count": 5024,
+      "sha256": "995a26e1c30f80b9528d1eb692e9f7f7f4437e6825f3b98c63dcfe2fd922deeb"
+    },
+    {
+      "path": "results/Expert_Models/MolGrapher/Molgrapher_smiles.jsonl",
+      "record_count": 5024,
+      "sha256": "c19866d9a83ce279114293513a5e31d31a8a66259ef2c75976bec7db8b3891a3"
+    },
+    {
+      "path": "results/Expert_Models/MolNexTR/MolNexTR_graph_simple.jsonl",
+      "record_count": 5024,
+      "sha256": "4c7a0a32ff6ca033637447374e79eacd5327b5e306acc092cfeaf0cc19b4c7de"
+    },
+    {
+      "path": "results/Expert_Models/MolNexTR/MolNexTR_smiles.jsonl",
+      "record_count": 5024,
+      "sha256": "ff52c92c4a5889e7dde0e95b9a4a2c61ee39a82d8c534f6725bdc8f1033a91b1"
+    },
+    {
+      "path": "results/Expert_Models/MolScribe/MolScribe_graph_simple.jsonl",
+      "record_count": 5024,
+      "sha256": "609be46073010988503b5c9ac444b26ed837ce207fe0935941d19d3ea5377c2f"
+    },
+    {
+      "path": "results/Expert_Models/MolScribe/MolScribe_smiles.jsonl",
+      "record_count": 5024,
+      "sha256": "656ef0f9297c6fb94d0e9bf01bf86c0c3d307553d0f2bcb83cf0886756579eb6"
+    },
+    {
+      "path": "results/Expert_Models/OCSU/OCSU_smiles.jsonl",
+      "record_count": 5024,
+      "sha256": "025fe9f7b80660acfb533dbf419d442bea23135d5bf25577f0f019931727fa5e"
+    },
+    {
+      "path": "results/GTR-VL-1.4.13/GTR-VL-1.4.13.jsonl",
+      "record_count": 5024,
+      "sha256": "d6762c2f0407a033b6b38f8c96d6eed3947de45d9b1b979c24dc93780f634008"
+    },
+    {
+      "path": "results/MLLM/Claude-opus-4-8/claude-opus-4-8_graph.jsonl",
+      "record_count": 5024,
+      "sha256": "355ba951771d4188d4bdbf3fa8cc86b990bae9379f9e42ec93a8b20869ec278b"
+    },
+    {
+      "path": "results/MLLM/Claude-opus-4-8/claude-opus-4-8_graph_simple.jsonl",
+      "record_count": 5024,
+      "sha256": "4b489c8ead53d310315e3f4ed26223f99e840b36a671106cb4bbfb1504702fea"
+    },
+    {
+      "path": "results/MLLM/Claude-opus-4-8/claude-opus-4-8_smiles.jsonl",
+      "record_count": 5024,
+      "sha256": "b1eeb9d1dfc48a6988e5a07ad86b582cce65be5e6001578395c417ee851aa2b3"
+    },
+    {
+      "path": "results/MLLM/GLM-4.5V/glm45_graph.jsonl",
+      "record_count": 5024,
+      "sha256": "1789f5d58d7c5d254ada869fc914646a40bca719eacdcadf2e99c34f818c2beb"
+    },
+    {
+      "path": "results/MLLM/GLM-4.5V/glm45_graph_simple.jsonl",
+      "record_count": 5024,
+      "sha256": "a0eea07393bc0d02f8a1cbc418b096d58507603544eef174224b30da5e6959cd"
+    },
+    {
+      "path": "results/MLLM/GLM-4.5V/glm45_smiles.jsonl",
+      "record_count": 5024,
+      "sha256": "243d09e755fd3b8598efd748e8459247ee4ef32ad223c9fe0caad351ee31b2bf"
+    },
+    {
+      "path": "results/MLLM/GPT-5.6-sol/GPT-5.6-sol_graph.jsonl",
+      "record_count": 5024,
+      "sha256": "1edbf930fe0d7d60f296621aaa48a20f3e2c2486848fe0496209fe6727dbaebc"
+    },
+    {
+      "path": "results/MLLM/GPT-5.6-sol/GPT-5.6-sol_graph_simple.jsonl",
+      "record_count": 5024,
+      "sha256": "990dde8cffde11fca8141b65c53cd0249ab8143a3a5c531d39f1e13a4296dba8"
+    },
+    {
+      "path": "results/MLLM/GPT-5.6-sol/GPT-5.6-sol_smiles.jsonl",
+      "record_count": 5024,
+      "sha256": "cfb5c791df9e75f04593fd4d527f131be6dcf1191f3ff3564d875df361c0b302"
+    },
+    {
+      "path": "results/MLLM/Gemini-3.5-flash-thinking/gemini-3.5-flash-thinking_graph.jsonl",
+      "record_count": 5024,
+      "sha256": "a027ab54116c542a9779768e0e6c294f7a3e9394f9d3690c7cbbdca2f7271f33"
+    },
+    {
+      "path": "results/MLLM/Gemini-3.5-flash-thinking/gemini-3.5-flash-thinking_graph_simple.jsonl",
+      "record_count": 5024,
+      "sha256": "7eb110b829a435a87c5c50e72db30aa107617fdd4b097a30c1fc874dc116d034"
+    },
+    {
+      "path": "results/MLLM/Gemini-3.5-flash-thinking/gemini-3.5-flash-thinking_smiles.jsonl",
+      "record_count": 5024,
+      "sha256": "5b06896d91c304fbfb6f5fd98c0e82f3fca7b41133c1ce7e54c288c69bd894fe"
+    },
+    {
+      "path": "results/MLLM/Intern-S1/interns1_graph.jsonl",
+      "record_count": 5024,
+      "sha256": "c9ee00c9ad4c4ca5b1b366347a33aafc109d4cd9011c95ec232de356154af251"
+    },
+    {
+      "path": "results/MLLM/Intern-S1/interns1_graph_simple.jsonl",
+      "record_count": 5024,
+      "sha256": "a5b3665c5e63535ea1261a17436c98543bc5d19689b6f8fdb3b85b34065b75be"
+    },
+    {
+      "path": "results/MLLM/Intern-S1/interns1_smiles.jsonl",
+      "record_count": 5024,
+      "sha256": "9f58bf92efa3dd1f3d08b01825b047cb7f2814456cb3126638b695da4cb2f4c9"
+    },
+    {
+      "path": "results/MLLM/InternVL3_5/InternVL3_5_graph.jsonl",
+      "record_count": 5024,
+      "sha256": "a45c94470c285bc971cb0aba73896171038ba2c9fd8448cad4d674c7eb070bdc"
+    },
+    {
+      "path": "results/MLLM/InternVL3_5/InternVL3_5_graph_simple.jsonl",
+      "record_count": 5024,
+      "sha256": "57221c6bdfc396e05d4ce1de50b84bb4a7dd4fc33bd91c1853c646e9b415861c"
+    },
+    {
+      "path": "results/MLLM/InternVL3_5/InternVL3_5_smiles.jsonl",
+      "record_count": 5024,
+      "sha256": "ff422ff98dc6d283ba0af5775977c66ed686744d5893a24ab60f75b352a49667"
+    },
+    {
+      "path": "results/MLLM/Seed1.6-Thinking/seed16_graph.jsonl",
+      "record_count": 5024,
+      "sha256": "26d58051752968a1ed60ce72fe0d9e821bd73feab1e1a73791cb492904a7f647"
+    },
+    {
+      "path": "results/MLLM/Seed1.6-Thinking/seed16_graph_simple.jsonl",
+      "record_count": 5024,
+      "sha256": "ef0f03c825859b8e6df26f8af4e87d24f24c0d91127782a41fdad8ee058fa5e4"
+    },
+    {
+      "path": "results/MLLM/Seed1.6-Thinking/seed16_smiles.jsonl",
+      "record_count": 5024,
+      "sha256": "5089affb41077a63307566c19e08df9fd5e7293030100a574e475d09f31e688b"
+    },
+    {
+      "path": "results/Tools/Logics-Parsing/logic-parsing-smiles.jsonl",
+      "record_count": 5024,
+      "sha256": "016e3e4009257e088d99d44caee860a610e26209d2ecb40ed63deb27e69d0528"
+    },
+    {
+      "path": "results/Tools/Mathpix/Mathpix_chem_smiles_with_url.jsonl",
+      "record_count": 5024,
+      "sha256": "f5765bbbf85506a9d5f73b3e3df6d0b14ed0d4c1f582049e939b94f3c9711705"
+    }
+  ]
+}
